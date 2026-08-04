@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { Direction, Flight } from '@/lib/types'
-import { parseView, type ViewState } from '@/lib/url-state'
+import type { ViewState } from '@/lib/url-state'
 
 interface FilterBarProps {
   view: ViewState
@@ -66,28 +66,6 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
   const lastSent = useRef(view.q)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // `onChange` is `page.tsx`'s `setView`, recreated every render and closing
-  // over that render's `view`. The debounce timer's callback is scheduled at
-  // keystroke time but fires later — if it captured `onChange` directly, any
-  // state change that lands in between (direction, airport, sort, another
-  // dropdown) would be silently reverted when the stale closure's
-  // `{...staleView, q}` overwrites the current view. A ref updated after
-  // every commit (never during render) narrows that window, but doesn't
-  // close it: Next's router updates `window.location.search` synchronously
-  // on `router.replace`, but the React-visible `view` (derived from
-  // `useSearchParams()`) can lag behind that by more than one debounce
-  // cycle while the navigation settles — confirmed by direct testing, where
-  // even the *newest* available `onChange` closure still carried a `view`
-  // one interim action behind. So the timer doesn't just call the latest
-  // `onChange` — it also builds its own patch from the *live* URL (see
-  // `handleQueryChange` below), which makes `setView`'s merge onto a
-  // possibly-stale `view` irrelevant: a complete ViewState patch overwrites
-  // every field of whatever `view` it's spread onto.
-  const onChangeRef = useRef(onChange)
-  useEffect(() => {
-    onChangeRef.current = onChange
-  })
-
   useEffect(() => {
     if (view.q !== lastSent.current) {
       // The change came from outside our own debounce (notably Reset) —
@@ -112,14 +90,13 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
       timeoutRef.current = null
-      // Parse the *live* URL rather than trusting `view` (a prop, however
-      // freshly captured) to be current — see the comment above `onChangeRef`.
-      // Sending the resulting complete ViewState as the patch, not just
-      // `{ q: next }`, means `setView`'s `{...view, ...patch}` merge reduces
-      // to `patch` regardless of how stale `view` is: every field is already
-      // present, so there's nothing left for a stale `view` to overwrite.
-      const live = parseView(new URLSearchParams(window.location.search))
-      onChangeRef.current({ ...live, q: next })
+      // `onChange` (page.tsx's `setView`) merges against a synchronously
+      // maintained `pendingView` ref rather than the closed-over `view`, so
+      // calling whatever closure was captured at schedule time — even one
+      // several renders stale — is safe: it reads the current intended
+      // state at call time, not whatever `view` looked like when this
+      // timer was scheduled.
+      onChange({ q: next })
     }, SEARCH_DEBOUNCE_MS)
   }
 

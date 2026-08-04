@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense, useMemo } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { FilterBar } from '@/components/FilterBar'
 import { FlightTable } from '@/components/FlightTable'
 import { Header } from '@/components/Header'
@@ -16,12 +16,31 @@ function Dashboard() {
   const view = useMemo(() => parseView(new URLSearchParams(searchParams)), [searchParams])
   const { data, updatedAt, fetchFailed, flash, refreshing, refresh } = useFlights(view.airport)
 
+  // `view` only updates once the navigation carrying it commits (Next writes
+  // history and recomputes `useSearchParams()` together, in the same
+  // render's commit phase). Two `setView` calls issued close together —
+  // e.g. a debounced search-box write racing an interim filter click, or
+  // even two ordinary clicks before the first one's navigation has
+  // committed — would otherwise each merge their own patch onto the SAME
+  // closed-over `view`, so the second call's `router.replace` can silently
+  // discard whatever the first one just set. `pendingView` is a
+  // synchronously-updated "most recently intended view" that every
+  // `setView` call both reads and writes, so a second call always merges
+  // onto the result of the first, regardless of whether either
+  // navigation's transition has committed yet.
+  const pendingView = useRef(view)
+  useEffect(() => {
+    pendingView.current = view
+  }, [view])
+
   const setView = (patch: Partial<ViewState>) => {
-    let next = { ...view, ...patch }
+    const base = pendingView.current
+    let next = { ...base, ...patch }
     // Airport switch clears the data-derived dropdowns; dir/sort/q/codeshares survive.
-    if (patch.airport && patch.airport !== view.airport) {
+    if (patch.airport && patch.airport !== base.airport) {
       next = { ...next, airline: '', terminal: '', location: '' }
     }
+    pendingView.current = next
     const qs = serializeView(next)
     router.replace(qs ? `?${qs}` : '/', { scroll: false })
   }
