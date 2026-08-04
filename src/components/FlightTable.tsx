@@ -39,14 +39,19 @@ export function FlightTable({ flights, direction, sort, onSort, emptyMessage }: 
     { key: 'extra', label: direction === 'departure' ? 'Check-in' : 'Baggage' },
   ]
   return (
-    <table className="w-full border-collapse text-sm">
+    <table className="w-full min-w-[720px] border-collapse text-sm">
       <thead>
         <tr className="bg-indigo-950 text-left text-white">
           {columns.map((c) => (
-            <th key={c.key} className="whitespace-nowrap px-2.5 py-2 font-semibold">
+            <th
+              key={c.key}
+              scope="col"
+              aria-sort={sort.key === c.key ? (sort.asc ? 'ascending' : 'descending') : 'none'}
+              className="whitespace-nowrap px-2.5 py-2 font-semibold"
+            >
               <button onClick={() => onSort(c.key)} className="inline-flex items-center gap-1">
                 {c.label}
-                <span className="text-[0.6em] opacity-80">
+                <span aria-hidden="true" className="text-[0.6em] opacity-80">
                   {sort.key === c.key ? (sort.asc ? '▲' : '▼') : '⇅'}
                 </span>
               </button>

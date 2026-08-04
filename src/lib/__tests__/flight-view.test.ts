@@ -74,6 +74,13 @@ describe('compareFlights', () => {
     const checkinOnly = flight({ checkin: 'Aisles 1-2' })
     expect(compareFlights(checkinOnly, baggageOnly, 'extra')).toBeLessThan(0)
   })
+  it('breaks a tie on the primary key by falling back to Effective time (regression: tied rows were left in arbitrary order)', () => {
+    const later = flight({ terminal: 'A', scheduled: '2026-08-03T18:00:00-07:00' })
+    const earlier = flight({ terminal: 'A', scheduled: '2026-08-03T17:00:00-07:00' })
+    // Same terminal (tie on the primary key) — must resolve by Effective time.
+    expect(compareFlights(later, earlier, 'terminal')).toBeGreaterThan(0)
+    expect(compareFlights(earlier, later, 'terminal')).toBeLessThan(0)
+  })
 })
 
 describe('matchesQuery', () => {

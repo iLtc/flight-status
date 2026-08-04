@@ -25,7 +25,7 @@ function str(a: string | undefined, b: string | undefined): number {
   return (a ?? '').localeCompare(b ?? '', 'en', { sensitivity: 'base' })
 }
 
-export function compareFlights(a: Flight, b: Flight, key: SortKey): number {
+function primaryCompare(a: Flight, b: Flight, key: SortKey): number {
   switch (key) {
     case 'airline': return str(a.airline, b.airline)
     case 'city': return str(a.city, b.city)
@@ -37,6 +37,17 @@ export function compareFlights(a: Flight, b: Flight, key: SortKey): number {
     case 'gate': return str(a.gate, b.gate)
     case 'extra': return str(a.baggage ?? a.checkin, b.baggage ?? b.checkin)
   }
+}
+
+/**
+ * Ascending comparator; the caller reverses for descending. Low-cardinality
+ * keys (terminal, gate, status) tie constantly — without a tiebreak, ties
+ * fall back to whatever order the array happened to be in, which looks
+ * arbitrary and reshuffles on every click. Falling back to Effective time
+ * keeps a tied group internally time-ordered and stable across re-sorts.
+ */
+export function compareFlights(a: Flight, b: Flight, key: SortKey): number {
+  return primaryCompare(a, b, key) || effectiveTime(a) - effectiveTime(b)
 }
 
 /** Prefix match on flight number; substring on airline and Far-end city. */
