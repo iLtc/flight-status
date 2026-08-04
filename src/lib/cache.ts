@@ -27,8 +27,8 @@ export function createCache<T>(fetcher: (airport: Airport) => Promise<T>) {
       entries.set(airport, entry)
     }
     const ttl = opts.force ? FORCE_TTL_MS : TTL_MS
-    if (entry.value !== undefined && Date.now() - entry.fetchedAt! < ttl) {
-      return { value: entry.value, fetchedAt: entry.fetchedAt!, stale: false }
+    if (entry.fetchedAt !== undefined && Date.now() - entry.fetchedAt < ttl) {
+      return { value: entry.value!, fetchedAt: entry.fetchedAt, stale: false }
     }
     if (!entry.inFlight) {
       entry.inFlight = fetcher(airport)
@@ -44,8 +44,8 @@ export function createCache<T>(fetcher: (airport: Airport) => Promise<T>) {
       await entry.inFlight
       return { value: entry.value!, fetchedAt: entry.fetchedAt!, stale: false }
     } catch (err) {
-      if (entry.value !== undefined) {
-        return { value: entry.value, fetchedAt: entry.fetchedAt!, stale: true }
+      if (entry.fetchedAt !== undefined) {
+        return { value: entry.value!, fetchedAt: entry.fetchedAt, stale: true }
       }
       throw err
     }

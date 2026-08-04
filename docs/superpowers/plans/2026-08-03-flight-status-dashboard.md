@@ -1474,6 +1474,9 @@ describe('createCache', () => {
     fetcher.mockRejectedValue(new Error('down again'))
     const served = await cache.get('SFO')
     expect(served).toMatchObject({ value: 'v1', stale: true })
+    // the stale response must report when the data was ORIGINALLY fetched,
+    // not the failed attempt's time -- the UI prints this as "data from".
+    expect(served.fetchedAt).toBe(first.fetchedAt)
   })
 
   it('a failed fetch clears the in-flight slot so the next call retries', async () => {
@@ -1481,6 +1484,33 @@ describe('createCache', () => {
     const cache = createCache(fetcher)
     await expect(cache.get('SFO')).rejects.toThrow('down')
     expect((await cache.get('SFO')).value).toBe('v1')
+  })
+
+  it('serves a cached undefined value as stale rather than treating it as uncached', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValue(new Error('down'))
+    const cache = createCache(fetcher)
+    const first = await cache.get('SFO')
+    expect(first).toMatchObject({ value: undefined, stale: false })
+    vi.advanceTimersByTime(6 * 60_000)
+    const served = await cache.get('SFO')
+    expect(served).toMatchObject({ value: undefined, stale: true })
+  })
+
+  it('keeps failure state independent between airports', async () => {
+    let sfoDown = false
+    const fetcher = vi.fn(async (a: string) => {
+      if (a === 'SFO' && sfoDown) throw new Error('down')
+      return `data-${a}`
+    })
+    const cache = createCache(fetcher)
+    await cache.get('SFO')
+    await cache.get('SJC')
+    vi.advanceTimersByTime(6 * 60_000)
+    sfoDown = true
+    const sfo = await cache.get('SFO')
+    const sjc = await cache.get('SJC')
+    expect(sfo).toMatchObject({ value: 'data-SFO', stale: true })
+    expect(sjc).toMatchObject({ value: 'data-SJC', stale: false })
   })
 })
 ```
@@ -1522,8 +1552,8 @@ export function createCache<T>(fetcher: (airport: Airport) => Promise<T>) {
       entries.set(airport, entry)
     }
     const ttl = opts.force ? FORCE_TTL_MS : TTL_MS
-    if (entry.value !== undefined && Date.now() - entry.fetchedAt! < ttl) {
-      return { value: entry.value, fetchedAt: entry.fetchedAt!, stale: false }
+    if (entry.fetchedAt !== undefined && Date.now() - entry.fetchedAt < ttl) {
+      return { value: entry.value!, fetchedAt: entry.fetchedAt, stale: false }
     }
     if (!entry.inFlight) {
       entry.inFlight = fetcher(airport)
@@ -1539,8 +1569,8 @@ export function createCache<T>(fetcher: (airport: Airport) => Promise<T>) {
       await entry.inFlight
       return { value: entry.value!, fetchedAt: entry.fetchedAt!, stale: false }
     } catch (err) {
-      if (entry.value !== undefined) {
-        return { value: entry.value, fetchedAt: entry.fetchedAt!, stale: true }
+      if (entry.fetchedAt !== undefined) {
+        return { value: entry.value!, fetchedAt: entry.fetchedAt, stale: true }
       }
       throw err
     }
