@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+docs
+tests
+scripts
+.superpowers
+*.md
