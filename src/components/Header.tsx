@@ -22,6 +22,8 @@ export function Header({ airport, onAirportChange, updatedAt, cachedAt, flash, r
         {AIRPORTS.map((a) => (
           <button
             key={a}
+            type="button"
+            aria-pressed={a === airport}
             onClick={() => onAirportChange(a)}
             className={`px-11 py-1.5 ${a === airport ? 'bg-indigo-950 text-white' : 'bg-white text-indigo-950'}`}
           >

@@ -2119,7 +2119,7 @@ export function useFlights(airport: Airport) {
         : {}
       const res = await fetch(
         `/api/flights?airport=${airport.toLowerCase()}${force ? '&forceRefresh=1' : ''}`,
-        { headers, cache: 'no-store' },
+        { headers, cache: 'no-store', signal: AbortSignal.timeout(15_000) },
       )
       if (gen !== generationRef.current) return
       if (res.status === 304) {
@@ -2159,13 +2159,16 @@ export function useFlights(airport: Airport) {
     }, POLL_MS)
   }
 
-  loadRef.current = load
+  useEffect(() => {
+    loadRef.current = load
+  })
 
   useEffect(() => {
     generationRef.current++
     setData(null)
     setUpdatedAt(null)
     setFetchFailed(false)
+    setFlash(null)
     etagRef.current = null
     cachedAtRef.current = null
     load()
@@ -2174,6 +2177,11 @@ export function useFlights(airport: Airport) {
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
+      // Bump first: invalidates any load still in flight so its `finally`
+      // cannot call schedule() after we've just cleared the timer below,
+      // which would otherwise arm an orphan poller with no live component
+      // (or, on airport switch, for the airport we're leaving).
+      generationRef.current++
       document.removeEventListener('visibilitychange', onVisible)
       clearTimeout(pollRef.current)
       clearTimeout(flashRef.current)
@@ -2196,6 +2204,42 @@ every `load()` call and on every airport switch, catches both cases with one
 mechanism (an `AbortController` scoped to the effect would only catch the
 airport-switch case); every state mutation in `load` is guarded by a check
 that the load's captured generation still matches before it runs.
+
+Three follow-up robustness fixes found on review, folded into the same hook:
+
+- **`setFlash(null)` in the reset block.** The reset block already cleared
+  `data`/`updatedAt`/`fetchFailed`/the etag and cachedAt refs on airport
+  change, and the effect cleanup clears the flash *timer* — but nothing
+  cleared the flash *state* itself. Without this line, force-refreshing (which
+  flashes "Already up to date") and then switching airports within the 3s
+  flash window cancels the timer that would have cleared it, leaving the
+  message pinned under the new airport's header indefinitely — and since nothing
+  but a future `showFlash` call clears it, and the fresh-data path deliberately
+  doesn't call `showFlash`, the user can end up seeing "Already up to date" at
+  the exact moment genuinely new data arrives.
+- **`generationRef.current++` as the first statement of the effect cleanup.**
+  Without this, a load still in flight at unmount (or airport switch) settles
+  with a *matching* generation, runs its `finally`, and calls `schedule()`
+  after the cleanup has already cleared the timer — arming an orphan poller
+  that keeps fetching with no live component behind it. Bumping generation in
+  cleanup invalidates such a load before its `finally` runs, so it can never
+  reschedule. Makes the mental model uniform: teardown invalidates in-flight
+  loads, matching how an airport switch already invalidates them.
+- **`fetch` now passes `signal: AbortSignal.timeout(15_000)`.** Without a
+  timeout, a hung request (as opposed to one that errors) never reaches
+  `catch` or `finally`, so it never reschedules — silently stopping all
+  polling for the rest of a shift. A 15s timeout routes a hang through the
+  existing `catch` block (which already sets `fetchFailed` and, via
+  `finally`, reschedules) instead of hanging forever.
+
+Also: `loadRef.current = load` moved out of the render body into its own
+`useEffect(() => { loadRef.current = load })` (no deps, runs after every
+render). Assigning a ref during render is undefined behavior under React's
+rules even though it's harmless today (no transitions or suspending children
+in this app to discard a render after it wrote the ref) — one concurrent
+feature away from reintroducing the exact wrong-airport-under-the-wrong-tab
+symptom the generation ref exists to prevent, and the generation ref does not
+cover this path since it's a ref write, not a `load()` state mutation.
 
 - [ ] **Step 2: Write `src/components/Header.tsx`**
 
@@ -2224,6 +2268,8 @@ export function Header({ airport, onAirportChange, updatedAt, cachedAt, flash, r
         {AIRPORTS.map((a) => (
           <button
             key={a}
+            type="button"
+            aria-pressed={a === airport}
             onClick={() => onAirportChange(a)}
             className={`px-11 py-1.5 ${a === airport ? 'bg-indigo-950 text-white' : 'bg-white text-indigo-950'}`}
           >
@@ -2249,6 +2295,12 @@ export function Header({ airport, onAirportChange, updatedAt, cachedAt, flash, r
   )
 }
 ```
+
+`type="button"` and `aria-pressed={a === airport}` on the segmented buttons:
+the pair conveys which airport is selected to assistive tech, since the
+selected/unselected states otherwise differ by background color alone.
+Visual layout is unchanged — approved from a mockup — so nothing else in
+`Header.tsx` moved.
 
 - [ ] **Step 3: Wire a temporary shell in `src/app/page.tsx`**
 

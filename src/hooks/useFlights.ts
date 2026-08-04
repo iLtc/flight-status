@@ -43,7 +43,7 @@ export function useFlights(airport: Airport) {
         : {}
       const res = await fetch(
         `/api/flights?airport=${airport.toLowerCase()}${force ? '&forceRefresh=1' : ''}`,
-        { headers, cache: 'no-store' },
+        { headers, cache: 'no-store', signal: AbortSignal.timeout(15_000) },
       )
       if (gen !== generationRef.current) return
       if (res.status === 304) {
@@ -83,13 +83,16 @@ export function useFlights(airport: Airport) {
     }, POLL_MS)
   }
 
-  loadRef.current = load
+  useEffect(() => {
+    loadRef.current = load
+  })
 
   useEffect(() => {
     generationRef.current++
     setData(null)
     setUpdatedAt(null)
     setFetchFailed(false)
+    setFlash(null)
     etagRef.current = null
     cachedAtRef.current = null
     load()
@@ -98,6 +101,11 @@ export function useFlights(airport: Airport) {
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
+      // Bump first: invalidates any load still in flight so its `finally`
+      // cannot call schedule() after we've just cleared the timer below,
+      // which would otherwise arm an orphan poller with no live component
+      // (or, on airport switch, for the airport we're leaving).
+      generationRef.current++
       document.removeEventListener('visibilitychange', onVisible)
       clearTimeout(pollRef.current)
       clearTimeout(flashRef.current)
