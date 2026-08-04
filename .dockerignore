@@ -6,3 +6,7 @@ tests
 scripts
 .superpowers
 *.md
+.env*
+.DS_Store
+*.log
+tsconfig.tsbuildinfo
