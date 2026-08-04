@@ -2549,7 +2549,7 @@ single filter). Exclude-codeshares is disabled at SJC.
 
 import { useEffect, useRef, useState } from 'react'
 import type { Direction, Flight } from '@/lib/types'
-import type { ViewState } from '@/lib/url-state'
+import { parseView, type ViewState } from '@/lib/url-state'
 
 interface FilterBarProps {
   view: ViewState
@@ -2613,6 +2613,28 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
   const lastSent = useRef(view.q)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // `onChange` is `page.tsx`'s `setView`, recreated every render and closing
+  // over that render's `view`. The debounce timer's callback is scheduled at
+  // keystroke time but fires later — if it captured `onChange` directly, any
+  // state change that lands in between (direction, airport, sort, another
+  // dropdown) would be silently reverted when the stale closure's
+  // `{...staleView, q}` overwrites the current view. A ref updated after
+  // every commit (never during render) narrows that window, but doesn't
+  // close it: Next's router updates `window.location.search` synchronously
+  // on `router.replace`, but the React-visible `view` (derived from
+  // `useSearchParams()`) can lag behind that by more than one debounce
+  // cycle while the navigation settles — confirmed by direct testing, where
+  // even the *newest* available `onChange` closure still carried a `view`
+  // one interim action behind. So the timer doesn't just call the latest
+  // `onChange` — it also builds its own patch from the *live* URL (see
+  // `handleQueryChange` below), which makes `setView`'s merge onto a
+  // possibly-stale `view` irrelevant: a complete ViewState patch overwrites
+  // every field of whatever `view` it's spread onto.
+  const onChangeRef = useRef(onChange)
+  useEffect(() => {
+    onChangeRef.current = onChange
+  })
+
   useEffect(() => {
     if (view.q !== lastSent.current) {
       // The change came from outside our own debounce (notably Reset) —
@@ -2637,7 +2659,14 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
       timeoutRef.current = null
-      onChange({ q: next })
+      // Parse the *live* URL rather than trusting `view` (a prop, however
+      // freshly captured) to be current — see the comment above `onChangeRef`.
+      // Sending the resulting complete ViewState as the patch, not just
+      // `{ q: next }`, means `setView`'s `{...view, ...patch}` merge reduces
+      // to `patch` regardless of how stale `view` is: every field is already
+      // present, so there's nothing left for a stale `view` to overwrite.
+      const live = parseView(new URLSearchParams(window.location.search))
+      onChangeRef.current({ ...live, q: next })
     }, SEARCH_DEBOUNCE_MS)
   }
 
@@ -2715,6 +2744,26 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
 > caught-and-fixed race where Reset landing on a URL identical to the
 > current one left a stale debounced write able to fire later and clobber
 > the reset.
+>
+> **Updated again (second fix-pass round, same day):** the first version of
+> the debounce fix routed the deferred write through a same-render `onChange`
+> closure, which could still carry a stale `view` — a direction switch, an
+> airport switch, a sort-header click, or a dropdown change landing inside
+> the 275ms window could get silently reverted when the debounce eventually
+> fired and merged `{ q }` onto that stale `view`. A ref updated post-commit
+> (`onChangeRef`) narrows this but doesn't close it: direct instrumentation
+> showed `window.location.search` can itself still lag a `router.replace`
+> call by a few milliseconds while Next's navigation settles, so even the
+> *newest* available `onChange` closure could carry a `view` one action
+> behind. The fix parses the live URL at fire time and sends a *complete*
+> `ViewState` (not just `{ q }`) as the patch, which makes `setView`'s
+> `{...view, ...patch}` merge onto a stale `view` a no-op — every field is
+> already present in the patch. Verified via debug-instrumented timestamps
+> and direct DOM-level interaction (typing then, within the same tick,
+> clicking Arrivals / switching airport / clicking a sort header / changing
+> the airline dropdown): the interim change and the query both land in the
+> final URL every time. See `task-12-report.md` for the full before/after
+> evidence.
 
 - [ ] **Step 4: Rewrite `src/app/page.tsx` as the full dashboard**
 
