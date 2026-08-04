@@ -30,6 +30,7 @@ describe('normalizeSfo — codeshares (ADR 0002)', () => {
 describe('normalizeSfo — check-in aisles (ADR 0001)', () => {
   it('maps INTL departures through the dictionary (TK 290 → Aisle 5)', () => {
     const tk = flights.find((f) => f.id.startsWith('SFO/TK/290/D/') && !f.isCodeshare)
+    expect(tk!.direction).toBe('departure')
     expect(tk!.terminal).toBe('INTL')
     expect(tk!.checkin).toBe('Aisle 5')
   })
@@ -43,13 +44,17 @@ describe('normalizeSfo — check-in aisles (ADR 0001)', () => {
 describe('normalizeSfo — times and status', () => {
   it('uses gate times; actual overrides estimate (ADR 0003)', () => {
     const ua2017 = flights.find((f) => f.airline === 'United' && f.flightNumber === '2017')!
+    expect(ua2017.direction).toBe('arrival')
+    expect(ua2017.gate).toBe('E11')
     expect(ua2017.scheduled).toBe('2026-08-03T12:44:00-07:00')
     expect(ua2017.estimated).toBe('2026-08-03T12:35:00-07:00') // actual_in_off_block_time
   })
   it('Landed rows have no gate actual — estimated falls back to the estimate', () => {
     const oz = flights.find((f) => f.id.startsWith('SFO/OZ/212/A/') && !f.isCodeshare)!
     expect(oz.status.kind).toBe('landed')
-    expect(oz.estimated).toBeDefined() // estimated_in_off_block_time, not actual
+    // estimated_in_off_block_time (16:20), NOT actual_aod_time (16:31) — the
+    // runway actual exists on this row and toBeDefined() would wrongly accept it.
+    expect(oz.estimated).toBe('2026-08-03T16:20:00-07:00')
   })
   it('Cancelled rows can have no estimated at all', () => {
     const b6 = flights.find((f) => f.id.startsWith('SFO/B6/215/A/') && !f.isCodeshare)!
@@ -57,20 +62,38 @@ describe('normalizeSfo — times and status', () => {
     expect(b6.estimated).toBeUndefined()
   })
   it('maps both remark casings to on-time and unknown remarks to other', () => {
+    const upper = flights.find((f) => f.id.startsWith('SFO/AC/744/D/') && !f.isCodeshare)!
+    const lower = flights.find((f) => f.id.startsWith('SFO/UA/1243/A/') && !f.isCodeshare)!
+    expect(upper.status.kind).toBe('on-time') // remark: "On Time"
+    expect(lower.status.kind).toBe('on-time') // remark: "On time"
     const kinds = new Set(flights.map((f) => f.status.kind))
     expect(kinds.has('other')).toBe(false) // curated fixture contains only known remarks
   })
 })
 
 describe('normalizeSfo — field fallbacks', () => {
-  it('falls back to airport_name when airport_city is missing (UA 5599)', () => {
+  it('falls back to airport_name when airport_city is missing (UA 5599 → Carlsbad)', () => {
     const ua = flights.find((f) => f.id.startsWith('SFO/UA/5599/A/') && !f.isCodeshare)!
-    expect(ua.city).toBeTruthy()
+    expect(ua.city).toBe('Carlsbad')
   })
   it('shows the immediate stop for multi-leg flights (UA 1482 → Seattle)', () => {
     const ua = flights.find((f) => f.id.startsWith('SFO/UA/1482/A/') && !f.isCodeshare)!
     expect(ua.city).toBe('Seattle')
     expect(ua.cityCode).toBe('SEA')
+    expect(ua.bagTimes).toEqual({
+      first: '2026-08-03T13:41:00-07:00',
+      last: '2026-08-03T13:57:00-07:00',
+    })
+  })
+  it('prefers airline_display_name over airline_name when they diverge (DL 667 → "Delta")', () => {
+    // airline_name is "DELTA"; a reversed fallback order would pass this
+    // through unchanged instead of preferring the display name.
+    const dl = flights.find((f) => f.id.startsWith('SFO/DL/667/A/') && !f.isCodeshare)!
+    expect(dl.airline).toBe('Delta')
+  })
+  it('prefers airline_display_name for post-merger carriers (Alaska → Hawaiian Airlines)', () => {
+    const ha = flights.find((f) => f.id.startsWith('SFO/AS/978/A/') && !f.isCodeshare)!
+    expect(ha.airline).toBe('Hawaiian Airlines')
   })
   it('maps ITM to INTL and null terminal to undefined', () => {
     expect(flights.some((f) => f.terminal === 'INTL')).toBe(true)
@@ -78,6 +101,10 @@ describe('normalizeSfo — field fallbacks', () => {
     expect(flights.some((f) => f.terminal === undefined)).toBe(true)
   })
   it('derives Carousel N from all three carousel_name formats', () => {
+    const dashLetter = flights.find((f) => f.id.startsWith('SFO/UA/2017/A/') && !f.isCodeshare)!
+    expect(dashLetter.baggage).toBe('Carousel 5') // "CL-F5" — discards the boarding-area letter
+    const dashless = flights.find((f) => f.id.startsWith('SFO/AV/562/A/') && !f.isCodeshare)!
+    expect(dashless.baggage).toBe('Carousel 10') // "CL10"
     const labels = flights.filter((f) => f.baggage).map((f) => f.baggage!)
     expect(labels.length).toBeGreaterThanOrEqual(3)
     expect(labels.every((b) => /^Carousel \d+$/.test(b))).toBe(true)

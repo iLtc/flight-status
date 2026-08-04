@@ -1,4 +1,4 @@
-// Extracts the curated ~20-record SFO fixture from docs/samples/ (spec §Testing).
+// Extracts the curated SFO fixture (49 records) from docs/samples/ (spec §Testing).
 // Run once: node scripts/extract-fixtures.mjs   (fixture is committed, not rebuilt in CI)
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 
@@ -31,6 +31,15 @@ pick('null terminal', (r) => r.terminal === null)
 pick('carousel CL-F5 style', (r) => /^CL-[A-Z]\d+$/.test(r.baggage_carousel?.carousel_name ?? ''))
 pick('carousel CL10 style', (r) => /^CL\d+$/.test(r.baggage_carousel?.carousel_name ?? ''))
 pick('carousel bare-number style', (r) => /^\d+$/.test(r.baggage_carousel?.carousel_name ?? ''))
+// display name diverges from name AND matches the post-merger carrier the spec
+// calls out by name (Alaska → Hawaiian Airlines) — pins the fallback ORDER,
+// unlike Azul (7016) above where airline_display_name is simply null.
+pick(
+  'post-merger airline name (Alaska → Hawaiian Airlines)',
+  (r) => r.airline.airline_display_name !== r.airline.airline_name && /Hawaiian/.test(r.airline.airline_display_name ?? ''),
+)
+pick('remark "On Time" casing', (r) => r.remark === 'On Time')
+pick('remark "On time" casing', (r) => r.remark === 'On time')
 
 const records = [...byPrefix, ...extra]
 

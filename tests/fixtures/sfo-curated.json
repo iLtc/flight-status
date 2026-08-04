@@ -15739,6 +15739,358 @@
     "icao_code": "B737",
     "aircraft_type_id": 234
    }
+  },
+  {
+   "aircraft_mvmt_id": 1681833,
+   "flight_id": "AS/978/A/2026-08-03",
+   "flight_kind": "Arrival",
+   "airline": {
+    "iata_code": "HA",
+    "icao_code": "ASA",
+    "airline_id": 20,
+    "airline_name": "Alaska",
+    "airline_display_name": "Hawaiian Airlines"
+   },
+   "flight_number": "978",
+   "callsign": "ASA978",
+   "gate": null,
+   "scheduled_date": "2026-08-03",
+   "scheduled_aod_time": "2026-08-03T18:27:00-07:00",
+   "scheduled_runway_time": null,
+   "scheduled_in_off_block_time": "2026-08-03T18:27:00-07:00",
+   "estimated_aod_time": null,
+   "estimated_runway_time": null,
+   "estimated_in_off_block_time": null,
+   "first_bag_time": null,
+   "actual_aod_time": null,
+   "actual_runway_time": null,
+   "actual_in_off_block_time": null,
+   "last_bag_time": null,
+   "n_stop": 0,
+   "aircraft_transport_id": null,
+   "has_code_share": false,
+   "linked_flight_id": null,
+   "remark": "Cancelled",
+   "airport": {
+    "iata_code": "OGG",
+    "icao_code": "PHOG",
+    "airport_id": 1522,
+    "airport_name": "Kahului Airport",
+    "airport_city": "Kahului"
+   },
+   "route_type_id": 1,
+   "diverted_airport": null,
+   "baggage_carousel": null,
+   "terminal": null,
+   "flight_nature": "PAX",
+   "service_type_id": null,
+   "gate_boarding_time": null,
+   "checkins": [],
+   "stands": [],
+   "routes": [
+    {
+     "route_id": 82814226,
+     "route_seq": 1,
+     "origin_airport": {
+      "iata_code": "OGG",
+      "icao_code": "PHOG",
+      "airport_id": 1522,
+      "airport_name": "Kahului Airport"
+     },
+     "destination_airport": {
+      "iata_code": "SFO",
+      "icao_code": "KSFO",
+      "airport_id": 1876,
+      "airport_name": "San Francisco International Airport"
+     }
+    }
+   ],
+   "code_shares": [],
+   "aircraft_transport_type": {
+    "iata_code": "32B",
+    "icao_code": "A321",
+    "aircraft_type_id": 15
+   }
+  },
+  {
+   "aircraft_mvmt_id": 1683610,
+   "flight_id": "AC/744/D/2026-08-03",
+   "flight_kind": "Departure",
+   "airline": {
+    "iata_code": "AC",
+    "icao_code": "ACA",
+    "airline_id": 7,
+    "airline_name": "Air Canada",
+    "airline_display_name": "Air Canada"
+   },
+   "flight_number": "744",
+   "callsign": "ACA744",
+   "gate": {
+    "gate_id": 62,
+    "gate_number": "D11"
+   },
+   "scheduled_date": "2026-08-03",
+   "scheduled_aod_time": "2026-08-03T16:40:00-07:00",
+   "scheduled_runway_time": null,
+   "scheduled_in_off_block_time": "2026-08-03T16:40:00-07:00",
+   "estimated_aod_time": "2026-08-03T16:40:00-07:00",
+   "estimated_runway_time": null,
+   "estimated_in_off_block_time": "2026-08-03T16:40:00-07:00",
+   "first_bag_time": null,
+   "actual_aod_time": null,
+   "actual_runway_time": null,
+   "actual_in_off_block_time": null,
+   "last_bag_time": null,
+   "n_stop": 0,
+   "aircraft_transport_id": 1306,
+   "has_code_share": true,
+   "linked_flight_id": "AC/743/A/2026-08-03",
+   "remark": "On Time",
+   "airport": {
+    "iata_code": "YYZ",
+    "icao_code": "CYYZ",
+    "airport_id": 2383,
+    "airport_name": "Toronto Pearson International Airport",
+    "airport_city": "Toronto"
+   },
+   "route_type_id": 4,
+   "diverted_airport": null,
+   "baggage_carousel": null,
+   "terminal": {
+    "terminal_id": 2,
+    "terminal_code": "T2"
+   },
+   "flight_nature": "PAX",
+   "service_type_id": 8,
+   "gate_boarding_time": "2026-08-03T16:05:00-07:00",
+   "checkins": [
+    {
+     "checkin": {
+      "checkin_id": 209,
+      "checkin_name": "1"
+     },
+     "end_time": "2026-08-03T22:35:00-07:00",
+     "start_time": "2026-08-03T04:30:00-07:00"
+    },
+    {
+     "checkin": {
+      "checkin_id": 210,
+      "checkin_name": "2"
+     },
+     "end_time": "2026-08-03T22:35:00-07:00",
+     "start_time": "2026-08-03T04:30:00-07:00"
+    },
+    {
+     "checkin": {
+      "checkin_id": 211,
+      "checkin_name": "3"
+     },
+     "end_time": "2026-08-03T22:35:00-07:00",
+     "start_time": "2026-08-03T04:30:00-07:00"
+    },
+    {
+     "checkin": {
+      "checkin_id": 212,
+      "checkin_name": "4"
+     },
+     "end_time": "2026-08-03T22:35:00-07:00",
+     "start_time": "2026-08-03T04:30:00-07:00"
+    },
+    {
+     "checkin": {
+      "checkin_id": 213,
+      "checkin_name": "5"
+     },
+     "end_time": "2026-08-03T22:35:00-07:00",
+     "start_time": "2026-08-03T04:30:00-07:00"
+    },
+    {
+     "checkin": {
+      "checkin_id": 214,
+      "checkin_name": "6"
+     },
+     "end_time": "2026-08-03T22:35:00-07:00",
+     "start_time": "2026-08-03T04:30:00-07:00"
+    },
+    {
+     "checkin": {
+      "checkin_id": 215,
+      "checkin_name": "7"
+     },
+     "end_time": "2026-08-03T22:35:00-07:00",
+     "start_time": "2026-08-03T04:30:00-07:00"
+    },
+    {
+     "checkin": {
+      "checkin_id": 216,
+      "checkin_name": "8"
+     },
+     "end_time": "2026-08-03T22:35:00-07:00",
+     "start_time": "2026-08-03T04:30:00-07:00"
+    }
+   ],
+   "stands": [
+    {
+     "stand": {
+      "stand_id": 127,
+      "stand_name": "D11"
+     },
+     "end_time": "2026-08-03T16:40:00-07:00",
+     "start_time": "2026-08-03T15:28:00-07:00"
+    }
+   ],
+   "routes": [
+    {
+     "route_id": 82931121,
+     "route_seq": 1,
+     "origin_airport": {
+      "iata_code": "SFO",
+      "icao_code": "KSFO",
+      "airport_id": 1876,
+      "airport_name": "San Francisco International Airport"
+     },
+     "destination_airport": {
+      "iata_code": "YYZ",
+      "icao_code": "CYYZ",
+      "airport_id": 2383,
+      "airport_name": "Toronto Pearson International Airport"
+     }
+    }
+   ],
+   "code_shares": [
+    {
+     "desc": null,
+     "code_share_id": 176922244,
+     "marketing_airline": {
+      "iata_code": "NZ",
+      "icao_code": "ANZ",
+      "airline_id": 15,
+      "airline_name": "Air New Zealand",
+      "airline_display_name": "Air New Zealand"
+     },
+     "marketing_flight_number": "4734"
+    },
+    {
+     "desc": null,
+     "code_share_id": 176922245,
+     "marketing_airline": {
+      "iata_code": "UA",
+      "icao_code": "UAL",
+      "airline_id": 106,
+      "airline_name": "United",
+      "airline_display_name": "United"
+     },
+     "marketing_flight_number": "8396"
+    }
+   ],
+   "aircraft_transport_type": {
+    "iata_code": "320",
+    "icao_code": "A320",
+    "aircraft_type_id": 10
+   }
+  },
+  {
+   "aircraft_mvmt_id": 1660892,
+   "flight_id": "UA/1243/A/2026-08-03",
+   "flight_kind": "Arrival",
+   "airline": {
+    "iata_code": "UA",
+    "icao_code": "UAL",
+    "airline_id": 106,
+    "airline_name": "United",
+    "airline_display_name": "United"
+   },
+   "flight_number": "1243",
+   "callsign": "UAL1243",
+   "gate": {
+    "gate_id": 119,
+    "gate_number": "G11"
+   },
+   "scheduled_date": "2026-08-03",
+   "scheduled_aod_time": "2026-08-03T17:05:00-07:00",
+   "scheduled_runway_time": null,
+   "scheduled_in_off_block_time": "2026-08-03T17:05:00-07:00",
+   "estimated_aod_time": "2026-08-03T17:01:00-07:00",
+   "estimated_runway_time": null,
+   "estimated_in_off_block_time": "2026-08-03T17:01:00-07:00",
+   "first_bag_time": null,
+   "actual_aod_time": null,
+   "actual_runway_time": null,
+   "actual_in_off_block_time": null,
+   "last_bag_time": null,
+   "n_stop": 0,
+   "aircraft_transport_id": 6649,
+   "has_code_share": true,
+   "linked_flight_id": "UA/751/D/2026-08-03",
+   "remark": "On time",
+   "airport": {
+    "iata_code": "PVR",
+    "icao_code": "MMPR",
+    "airport_id": 1722,
+    "airport_name": "Lic Gustavo Diaz Ordaz International Airport",
+    "airport_city": "Puerto Vallarta"
+   },
+   "route_type_id": 3,
+   "diverted_airport": null,
+   "baggage_carousel": {
+    "carousel_name": "CL5",
+    "baggage_carousel_id": 8
+   },
+   "terminal": {
+    "terminal_id": 4,
+    "terminal_code": "ITM"
+   },
+   "flight_nature": "PAX",
+   "service_type_id": 8,
+   "gate_boarding_time": null,
+   "checkins": [],
+   "stands": [
+    {
+     "stand": {
+      "stand_id": 197,
+      "stand_name": "G11R"
+     },
+     "end_time": "2026-08-03T17:52:00-07:00",
+     "start_time": "2026-08-03T17:01:00-07:00"
+    }
+   ],
+   "routes": [
+    {
+     "route_id": 82933064,
+     "route_seq": 1,
+     "origin_airport": {
+      "iata_code": "PVR",
+      "icao_code": "MMPR",
+      "airport_id": 1722,
+      "airport_name": "Lic Gustavo Diaz Ordaz International Airport"
+     },
+     "destination_airport": {
+      "iata_code": "SFO",
+      "icao_code": "KSFO",
+      "airport_id": 1876,
+      "airport_name": "San Francisco International Airport"
+     }
+    }
+   ],
+   "code_shares": [
+    {
+     "desc": null,
+     "code_share_id": 176926424,
+     "marketing_airline": {
+      "iata_code": "AC",
+      "icao_code": "ACA",
+      "airline_id": 7,
+      "airline_name": "Air Canada",
+      "airline_display_name": "Air Canada"
+     },
+     "marketing_flight_number": "5311"
+    }
+   ],
+   "aircraft_transport_type": {
+    "iata_code": "738",
+    "icao_code": "B738",
+    "aircraft_type_id": 46
+   }
   }
  ]
 }
