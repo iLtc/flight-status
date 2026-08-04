@@ -23,6 +23,20 @@ Every push to `main` publishes `ghcr.io/iltc/flight-status:latest`
     docker run -d --name flight-status -p 3000:3000 \
       --restart unless-stopped ghcr.io/iltc/flight-status:latest
 
+**One-time setup:** GHCR packages auto-created by `GITHUB_TOKEN` don't
+reliably inherit the repo's visibility and often land private. After the
+first successful workflow run, check the `flight-status` package under the
+repo's Packages tab:
+
+- If private and you want the `docker pull` above to work unauthenticated,
+  open the package's settings and change its visibility to public — a
+  one-time change.
+- Otherwise, keep it private and authenticate on the server once with a
+  personal access token scoped to `read:packages`:
+  `echo "$GHCR_PAT" | docker login ghcr.io -u iLtc --password-stdin`.
+
+Needed only once, before the first deploy.
+
 ## API
 
 - `GET /api/flights?airport=sfo|sjc[&forceRefresh=1]` — normalized, windowed
