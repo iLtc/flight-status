@@ -22,7 +22,10 @@ export function windowed(flights: Flight[], now: Date): Flight[] {
 }
 
 function str(a: string | undefined, b: string | undefined): number {
-  return (a ?? '').localeCompare(b ?? '', 'en', { sensitivity: 'base' })
+  // numeric: true gives numeric collation, so "B10" sorts after "B2" (gate
+  // and carousel labels embed numbers) instead of before it as plain
+  // lexicographic comparison would order them.
+  return (a ?? '').localeCompare(b ?? '', 'en', { sensitivity: 'base', numeric: true })
 }
 
 function primaryCompare(a: Flight, b: Flight, key: SortKey): number {

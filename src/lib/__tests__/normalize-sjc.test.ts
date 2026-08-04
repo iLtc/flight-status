@@ -52,6 +52,21 @@ describe('normalizeSjc — shape', () => {
     expect(mixed).toHaveLength(1)
     expect(mixed[0].flightNumber).toBe('GOOD')
   })
+  it('skips a row whose date field is not a string (malformed feed), keeping the good row', () => {
+    const mixed = normalizeSjc(
+      [
+        { date: 20260803, time: '4:05 PM', airline: 'X', flight_number: 'BAD',
+          origin: 'Y', origin_code: 'YYY', terminal: 'A', gate: '1', baggage: 'A1',
+          status: 'On Time' },
+        { date: 'Aug 03', time: '4:05 PM', airline: 'X', flight_number: 'GOOD',
+          origin: 'Y', origin_code: 'YYY', terminal: 'A', gate: '1', baggage: 'A1',
+          status: 'On Time' },
+      ],
+      [], NOW,
+    )
+    expect(mixed).toHaveLength(1)
+    expect(mixed[0].flightNumber).toBe('GOOD')
+  })
 })
 
 describe('normalizeSjc — status parsing', () => {

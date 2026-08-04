@@ -71,6 +71,33 @@ describe('normalizeSfo — times and status', () => {
   })
 })
 
+describe('normalizeSfo — malformed feed rows', () => {
+  it('normalizes an INTL departure missing the checkins key instead of throwing', () => {
+    const raw = {
+      flight_id: 'XX/1/D',
+      flight_kind: 'Departure',
+      airline: { iata_code: 'XX', airline_name: 'Test Air' },
+      flight_number: '1',
+      airport: { iata_code: 'ZZZ', airport_city: 'Nowhere' },
+      scheduled_in_off_block_time: '2026-08-03T12:00:00-07:00',
+      estimated_in_off_block_time: null,
+      actual_in_off_block_time: null,
+      first_bag_time: null,
+      last_bag_time: null,
+      remark: 'On Time',
+      terminal: { terminal_code: 'ITM' },
+      gate: null,
+      baggage_carousel: null,
+      // checkins intentionally omitted — real-world feed drift, not a test artifact.
+    }
+    expect(() => normalizeSfo({ data: [raw] }, {})).not.toThrow()
+    const result = normalizeSfo({ data: [raw] }, {})
+    expect(result).toHaveLength(1)
+    expect(result[0].terminal).toBe('INTL')
+    expect(result[0].checkin).toBeUndefined()
+  })
+})
+
 describe('normalizeSfo — field fallbacks', () => {
   it('falls back to airport_name when airport_city is missing (UA 5599 → Carlsbad)', () => {
     const ua = flights.find((f) => f.id.startsWith('SFO/UA/5599/A/') && !f.isCodeshare)!

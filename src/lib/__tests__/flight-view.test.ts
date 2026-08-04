@@ -74,6 +74,12 @@ describe('compareFlights', () => {
     const checkinOnly = flight({ checkin: 'Aisles 1-2' })
     expect(compareFlights(checkinOnly, baggageOnly, 'extra')).toBeLessThan(0)
   })
+  it('sorts gate/carousel labels numerically so B2 comes before B10 (regression: plain localeCompare put B10 first)', () => {
+    const b2 = flight({ gate: 'B2' })
+    const b10 = flight({ gate: 'B10' })
+    expect(compareFlights(b2, b10, 'gate')).toBeLessThan(0)
+    expect(compareFlights(b10, b2, 'gate')).toBeGreaterThan(0)
+  })
   it('breaks a tie on the primary key by falling back to Effective time (regression: tied rows were left in arbitrary order)', () => {
     const later = flight({ terminal: 'A', scheduled: '2026-08-03T18:00:00-07:00' })
     const earlier = flight({ terminal: 'A', scheduled: '2026-08-03T17:00:00-07:00' })

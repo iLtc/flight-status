@@ -96,6 +96,26 @@ describe('GET /api/flights', () => {
     expect(body.cachedAt).toBe('2026-08-03T16:42:00-07:00')
   })
 
+  it('serves a fresh 200 with stale:true — not a 304 — to a client holding the pre-outage ETag', async () => {
+    // Regression: the ETag used to be derived from airport+fetchedAt only,
+    // so a stale response (which deliberately preserves the original
+    // fetchedAt) carried the SAME ETag as the fresh response it mirrors.
+    // A client polling every 60s and already holding that ETag would get a
+    // 304 during an outage and never learn stale:true — the amber banner
+    // never renders and Force Refresh falsely flashes "Already up to date".
+    stubUpstream()
+    const { GET } = await importRoute()
+    const first = await GET(request('airport=sfo'))
+    const etag = first.headers.get('etag')!
+    vi.setSystemTime(new Date('2026-08-03T16:48:00-07:00')) // TTL expired
+    stubUpstream(true)
+    const res = await GET(request('airport=sfo', { 'if-none-match': etag }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.stale).toBe(true)
+    expect(res.headers.get('etag')).not.toBe(etag)
+  })
+
   it('forceRefresh bypasses the 5-minute TTL early, via the 1-minute force floor', async () => {
     stubUpstream()
     const { GET } = await importRoute()

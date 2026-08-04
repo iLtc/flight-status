@@ -53,7 +53,12 @@ export function useFlights(airport: Airport) {
       } else if (res.ok) {
         const body: FlightsResponse = await res.json()
         if (gen !== generationRef.current) return
-        if (force && cachedAtRef.current === body.cachedAt) showFlash('Already up to date')
+        // Guarded on !body.stale: cachedAt is unchanged both when the data
+        // is genuinely fresh (nothing new upstream) AND when it's stale
+        // (cache.ts pins fetchedAt on failure) — only the former is real
+        // reassurance. Without this guard a force refresh during an outage
+        // would flash "Already up to date" while gates and times drift.
+        if (force && !body.stale && cachedAtRef.current === body.cachedAt) showFlash('Already up to date')
         etagRef.current = res.headers.get('etag')
         cachedAtRef.current = body.cachedAt
         setData(body)

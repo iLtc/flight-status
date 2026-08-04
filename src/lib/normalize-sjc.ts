@@ -2,8 +2,11 @@ import { parseSjcDateTime, toPtIso } from '@/lib/time'
 import type { Direction, Flight, FlightStatus } from '@/lib/types'
 
 interface SjcRecord {
-  date: string
-  time: string
+  // Typed unknown, not string: the feed's shape is not guaranteed, and
+  // toFlight() below must check these before ever passing them to
+  // parseSjcDateTime (which calls .trim() and throws on a non-string).
+  date: unknown
+  time: unknown
   airline: string
   flight_number: string
   origin?: string
@@ -44,6 +47,11 @@ function parseStatus(
 }
 
 function toFlight(r: SjcRecord, direction: Direction, now: Date): Flight | null {
+  // A missing or non-string date/time would otherwise reach date.trim() in
+  // parseSjcDateTime and throw, aborting normalization for the whole feed
+  // instead of just dropping this one malformed row (same skip-the-row
+  // precedent as the "unparseable time" case below).
+  if (typeof r.date !== 'string' || typeof r.time !== 'string') return null
   const scheduled = parseSjcDateTime(r.date, r.time, now)
   if (!scheduled) return null
   const status = parseStatus(r.status, r.date, scheduled, now)

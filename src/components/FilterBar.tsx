@@ -122,6 +122,8 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
         {dirs.map((d) => (
           <button
             key={d.value}
+            type="button"
+            aria-pressed={view.dir === d.value}
             onClick={() => onChange({ dir: d.value })}
             className={`px-4 py-1.5 ${view.dir === d.value ? 'bg-indigo-950 text-white' : 'bg-white text-indigo-950'}`}
           >

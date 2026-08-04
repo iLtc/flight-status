@@ -472,8 +472,18 @@ describe('aisleLabel', () => {
     expect(aisleLabel(['CURBSIDE 5', 'SELF SERVICE BAG DROP 12'], DICT)).toBeUndefined()
     expect(aisleLabel([], DICT)).toBeUndefined()
   })
+  it('skips a counter name that collides with an Object.prototype member instead of crashing', () => {
+    // A bare dict['constructor'] returns Object's constructor function
+    // rather than undefined, which used to throw inside .replace().
+    expect(aisleLabel(['constructor'], DICT)).toBeUndefined()
+    expect(aisleLabel(['constructor', '57'], DICT)).toBe('Aisle 5')
+  })
 })
 ```
+
+> **Updated by the final-review fix pass (2026-08-04):** added the
+> `Object.prototype`-collision test above (`'constructor'`). See the Step 3
+> code block update below.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -495,7 +505,12 @@ export function aisleLabel(
 ): string | undefined {
   const nums = [...new Set(
     counters
-      .map((c) => dict[c])
+      // Object.hasOwn guards against a counter name that collides with an
+      // Object.prototype member (e.g. "constructor"): a bare dict[c] would
+      // return that inherited function instead of undefined, which then
+      // throws in .replace below instead of being skipped like any other
+      // unmapped counter.
+      .map((c) => (Object.hasOwn(dict, c) ? dict[c] : undefined))
       .filter((label): label is string => Boolean(label))
       .map((label) => Number(label.replace(/\D+/g, ''))),
   )].sort((a, b) => a - b)
@@ -510,6 +525,13 @@ export function aisleLabel(
   return `${nums.length === 1 ? 'Aisle' : 'Aisles'} ${parts.join(', ')}`
 }
 ```
+
+> **Updated by the final-review fix pass (2026-08-04):** replaced the bare
+> `dict[c]` lookup with `Object.hasOwn(dict, c) ? dict[c] : undefined`. A
+> counter name equal to an `Object.prototype` member name (e.g.
+> `"constructor"`) made `dict[c]` return that inherited function instead of
+> `undefined`, which then threw inside `.replace()` — a single stray counter
+> name in the upstream feed could crash the entire SFO normalization pass.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -688,6 +710,33 @@ describe('normalizeSfo — times and status', () => {
   })
 })
 
+describe('normalizeSfo — malformed feed rows', () => {
+  it('normalizes an INTL departure missing the checkins key instead of throwing', () => {
+    const raw = {
+      flight_id: 'XX/1/D',
+      flight_kind: 'Departure',
+      airline: { iata_code: 'XX', airline_name: 'Test Air' },
+      flight_number: '1',
+      airport: { iata_code: 'ZZZ', airport_city: 'Nowhere' },
+      scheduled_in_off_block_time: '2026-08-03T12:00:00-07:00',
+      estimated_in_off_block_time: null,
+      actual_in_off_block_time: null,
+      first_bag_time: null,
+      last_bag_time: null,
+      remark: 'On Time',
+      terminal: { terminal_code: 'ITM' },
+      gate: null,
+      baggage_carousel: null,
+      // checkins intentionally omitted — real-world feed drift, not a test artifact.
+    }
+    expect(() => normalizeSfo({ data: [raw] }, {})).not.toThrow()
+    const result = normalizeSfo({ data: [raw] }, {})
+    expect(result).toHaveLength(1)
+    expect(result[0].terminal).toBe('INTL')
+    expect(result[0].checkin).toBeUndefined()
+  })
+})
+
 describe('normalizeSfo — field fallbacks', () => {
   it('falls back to airport_name when airport_city is missing (UA 5599 → Carlsbad)', () => {
     const ua = flights.find((f) => f.id.startsWith('SFO/UA/5599/A/') && !f.isCodeshare)!
@@ -774,7 +823,7 @@ interface SfoRecord {
   terminal: { terminal_code?: string } | null
   gate: { gate_number?: string } | null
   baggage_carousel: { carousel_name?: string } | null
-  checkins: Array<{ checkin: { checkin_name: string } }>
+  checkins?: Array<{ checkin: { checkin_name: string } }>
 }
 
 const REMARK_KINDS: Record<string, { kind: StatusKind; text: string }> = {
@@ -853,7 +902,7 @@ export function normalizeSfo(feed: SfoFeed, checkins: Record<string, string>): F
       // ADR 0001: aisles exist only in the International Terminal. T1/T2
       // counters share the 1–168 numeric range and would map to WRONG aisles.
       flight.checkin = aisleLabel(
-        raw.checkins.map((c) => c.checkin.checkin_name),
+        (raw.checkins ?? []).map((c) => c.checkin.checkin_name),
         checkins,
       )
     }
@@ -862,6 +911,16 @@ export function normalizeSfo(feed: SfoFeed, checkins: Record<string, string>): F
   return out
 }
 ```
+
+> **Updated by the final-review fix pass (2026-08-04):** `checkins` on
+> `SfoRecord` is now optional, and the call site uses `(raw.checkins ?? [])`.
+> The spec promises defensive normalization degrading per-row, but a bare
+> `raw.checkins.map(...)` threw when an INTL departure record lacked the
+> `checkins` key at all, which aborts normalization for the *entire* airport
+> (the cache then serves stale forever, or a fresh container 502s) instead
+> of dropping just that one row. A new test in
+> `src/lib/__tests__/normalize-sfo.test.ts` constructs an INTL departure
+> record missing `checkins` and asserts it normalizes instead of throwing.
 
 - [ ] **Step 6: Run tests to verify they pass**
 
@@ -946,6 +1005,21 @@ describe('normalizeSjc — shape', () => {
     expect(mixed).toHaveLength(1)
     expect(mixed[0].flightNumber).toBe('GOOD')
   })
+  it('skips a row whose date field is not a string (malformed feed), keeping the good row', () => {
+    const mixed = normalizeSjc(
+      [
+        { date: 20260803, time: '4:05 PM', airline: 'X', flight_number: 'BAD',
+          origin: 'Y', origin_code: 'YYY', terminal: 'A', gate: '1', baggage: 'A1',
+          status: 'On Time' },
+        { date: 'Aug 03', time: '4:05 PM', airline: 'X', flight_number: 'GOOD',
+          origin: 'Y', origin_code: 'YYY', terminal: 'A', gate: '1', baggage: 'A1',
+          status: 'On Time' },
+      ],
+      [], NOW,
+    )
+    expect(mixed).toHaveLength(1)
+    expect(mixed[0].flightNumber).toBe('GOOD')
+  })
 })
 
 describe('normalizeSjc — status parsing', () => {
@@ -1016,8 +1090,11 @@ import { parseSjcDateTime, toPtIso } from '@/lib/time'
 import type { Direction, Flight, FlightStatus } from '@/lib/types'
 
 interface SjcRecord {
-  date: string
-  time: string
+  // Typed unknown, not string: the feed's shape is not guaranteed, and
+  // toFlight() below must check these before ever passing them to
+  // parseSjcDateTime (which calls .trim() and throws on a non-string).
+  date: unknown
+  time: unknown
   airline: string
   flight_number: string
   origin?: string
@@ -1058,6 +1135,11 @@ function parseStatus(
 }
 
 function toFlight(r: SjcRecord, direction: Direction, now: Date): Flight | null {
+  // A missing or non-string date/time would otherwise reach date.trim() in
+  // parseSjcDateTime and throw, aborting normalization for the whole feed
+  // instead of just dropping this one malformed row (same skip-the-row
+  // precedent as the "unparseable time" case below).
+  if (typeof r.date !== 'string' || typeof r.time !== 'string') return null
   const scheduled = parseSjcDateTime(r.date, r.time, now)
   if (!scheduled) return null
   const status = parseStatus(r.status, r.date, scheduled, now)
@@ -1086,6 +1168,17 @@ export function normalizeSjc(arrivals: unknown[], departures: unknown[], now: Da
   ].filter((f): f is Flight => f !== null)
 }
 ```
+
+> **Updated by the final-review fix pass (2026-08-04):** `SjcRecord.date`
+> and `.time` are now typed `unknown` (describing what the feed actually
+> guarantees, rather than a `string` type asserted onto data cast in from
+> `unknown[]`), and `toFlight` returns `null` for a non-string `date` or
+> `time` before ever calling `parseSjcDateTime` — otherwise `date.trim()` in
+> `time.ts` throws, aborting normalization for the entire SJC feed instead
+> of just dropping the one malformed row (the same skip-the-row precedent
+> already used for an unparseable scheduled time). A new test in
+> `src/lib/__tests__/normalize-sjc.test.ts` gives one row a numeric `date`
+> alongside a good row and asserts only the good one survives.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1195,6 +1288,19 @@ describe('compareFlights', () => {
     const checkinOnly = flight({ checkin: 'Aisles 1-2' })
     expect(compareFlights(checkinOnly, baggageOnly, 'extra')).toBeLessThan(0)
   })
+  it('sorts gate/carousel labels numerically so B2 comes before B10 (regression: plain localeCompare put B10 first)', () => {
+    const b2 = flight({ gate: 'B2' })
+    const b10 = flight({ gate: 'B10' })
+    expect(compareFlights(b2, b10, 'gate')).toBeLessThan(0)
+    expect(compareFlights(b10, b2, 'gate')).toBeGreaterThan(0)
+  })
+  it('breaks a tie on the primary key by falling back to Effective time (regression: tied rows were left in arbitrary order)', () => {
+    const later = flight({ terminal: 'A', scheduled: '2026-08-03T18:00:00-07:00' })
+    const earlier = flight({ terminal: 'A', scheduled: '2026-08-03T17:00:00-07:00' })
+    // Same terminal (tie on the primary key) — must resolve by Effective time.
+    expect(compareFlights(later, earlier, 'terminal')).toBeGreaterThan(0)
+    expect(compareFlights(earlier, later, 'terminal')).toBeLessThan(0)
+  })
 })
 
 describe('matchesQuery', () => {
@@ -1250,7 +1356,10 @@ export function windowed(flights: Flight[], now: Date): Flight[] {
 }
 
 function str(a: string | undefined, b: string | undefined): number {
-  return (a ?? '').localeCompare(b ?? '', 'en', { sensitivity: 'base' })
+  // numeric: true gives numeric collation, so "B10" sorts after "B2" (gate
+  // and carousel labels embed numbers) instead of before it as plain
+  // lexicographic comparison would order them.
+  return (a ?? '').localeCompare(b ?? '', 'en', { sensitivity: 'base', numeric: true })
 }
 
 function primaryCompare(a: Flight, b: Flight, key: SortKey): number {
@@ -1299,6 +1408,14 @@ export function matchesQuery(f: Flight, q: string): boolean {
 > `src/lib/__tests__/flight-view.test.ts` pins two flights tied on `terminal`
 > resolving by Effective time; see `task-12-report.md` for the mutation
 > check (removing the fallback fails only that test).
+>
+> **Updated by the final-review fix pass (2026-08-04):** `str()` now passes
+> `numeric: true` to `localeCompare`, so gate/carousel labels collate
+> numerically (`B2` before `B10`, `Carousel 2` before `Carousel 10`)
+> instead of lexicographically (`B10` before `B2`) — user-visible whenever a
+> volunteer sorts by Gate. A regression test pins `B2` before `B10`; see
+> `final-review-fixes-report.md` for the mutation check (removing
+> `numeric: true` fails only that test).
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1704,7 +1821,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `Could not reach ${airport}` }, { status: 502 })
   }
 
-  const etag = `"${airport}-${result.fetchedAt}"`
+  // The stale flag is folded into the ETag: a stale response deliberately
+  // reuses the original fetchedAt (see cache.ts), so without this a client
+  // holding the pre-outage ETag would get a 304 and never learn the data
+  // went stale. Folding stale in means the held ETag stops matching the
+  // moment the cache goes stale, so the client gets exactly one fresh 200
+  // carrying stale:true, then cheap 304s again until recovery changes
+  // fetchedAt and the ETag again.
+  const etag = `"${airport}-${result.fetchedAt}-${result.stale ? 1 : 0}"`
   if (req.headers.get('if-none-match') === etag) {
     return new NextResponse(null, {
       status: 304,
@@ -1723,6 +1847,23 @@ export async function GET(req: NextRequest) {
   })
 }
 ```
+
+> **Updated by the final-review fix pass (2026-08-04):** the ETag now folds
+> in `result.stale` (`` `"${airport}-${result.fetchedAt}-${result.stale ? 1 : 0}"` ``),
+> not just `airport + fetchedAt`. Cache.ts deliberately preserves the
+> original `fetchedAt` when serving stale data after an upstream failure, so
+> the old ETag was identical between the fresh response and the stale
+> response mirroring it — a client already holding that ETag (the normal
+> 60s poller, the dominant usage mode for a dashboard left open during a
+> shift) got a 304 during an outage and never learned `stale: true`. The
+> amber banner never rendered, and Force Refresh flashed a false "Already
+> up to date". Folding stale into the ETag means the held ETag stops
+> matching the instant the cache goes stale: one fresh 200 with
+> `stale: true` gets through, subsequent polls match the new stale ETag and
+> go back to cheap 304s, and recovery (new `fetchedAt`) changes the ETag
+> again and clears the banner. See `final-review-fixes-report.md` for the
+> mutation check (reverting to the old expression fails only the new
+> pre-outage-ETag test).
 
 - [ ] **Step 4: Write the failing route test** — `src/lib/__tests__/route.test.ts`
 
@@ -1827,6 +1968,26 @@ describe('GET /api/flights', () => {
     const body = await res.json()
     expect(body.stale).toBe(true)
     expect(body.cachedAt).toBe('2026-08-03T16:42:00-07:00')
+  })
+
+  it('serves a fresh 200 with stale:true — not a 304 — to a client holding the pre-outage ETag', async () => {
+    // Regression: the ETag used to be derived from airport+fetchedAt only,
+    // so a stale response (which deliberately preserves the original
+    // fetchedAt) carried the SAME ETag as the fresh response it mirrors.
+    // A client polling every 60s and already holding that ETag would get a
+    // 304 during an outage and never learn stale:true — the amber banner
+    // never renders and Force Refresh falsely flashes "Already up to date".
+    stubUpstream()
+    const { GET } = await importRoute()
+    const first = await GET(request('airport=sfo'))
+    const etag = first.headers.get('etag')!
+    vi.setSystemTime(new Date('2026-08-03T16:48:00-07:00')) // TTL expired
+    stubUpstream(true)
+    const res = await GET(request('airport=sfo', { 'if-none-match': etag }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.stale).toBe(true)
+    expect(res.headers.get('etag')).not.toBe(etag)
   })
 
   it('forceRefresh bypasses the 5-minute TTL early, via the 1-minute force floor', async () => {
@@ -2150,7 +2311,12 @@ export function useFlights(airport: Airport) {
       } else if (res.ok) {
         const body: FlightsResponse = await res.json()
         if (gen !== generationRef.current) return
-        if (force && cachedAtRef.current === body.cachedAt) showFlash('Already up to date')
+        // Guarded on !body.stale: cachedAt is unchanged both when the data
+        // is genuinely fresh (nothing new upstream) AND when it's stale
+        // (cache.ts pins fetchedAt on failure) — only the former is real
+        // reassurance. Without this guard a force refresh during an outage
+        // would flash "Already up to date" while gates and times drift.
+        if (force && !body.stale && cachedAtRef.current === body.cachedAt) showFlash('Already up to date')
         etagRef.current = res.headers.get('etag')
         cachedAtRef.current = body.cachedAt
         setData(body)
@@ -2261,6 +2427,17 @@ in this app to discard a render after it wrote the ref) — one concurrent
 feature away from reintroducing the exact wrong-airport-under-the-wrong-tab
 symptom the generation ref exists to prevent, and the generation ref does not
 cover this path since it's a ref write, not a `load()` state mutation.
+
+> **Updated by the final-review fix pass (2026-08-04):** the 200-path flash
+> condition is now `force && !body.stale && cachedAtRef.current === body.cachedAt`.
+> `cachedAt` is unchanged both when data is genuinely fresh (nothing new
+> upstream) AND when the response is stale (`cache.ts` pins `fetchedAt` on
+> failure) — only the former is real reassurance. Paired with the route's
+> ETag fix (Task 9), without this guard a Force Refresh during an outage
+> would flash "Already up to date" while gates and times drift — the one
+> action a volunteer takes to check freshness giving false reassurance. The
+> 304-path flash is untouched: after the ETag fix, a stale response can no
+> longer produce a 304 for a client holding a pre-outage ETag.
 
 - [ ] **Step 2: Write `src/components/Header.tsx`**
 
@@ -2669,6 +2846,8 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
         {dirs.map((d) => (
           <button
             key={d.value}
+            type="button"
+            aria-pressed={view.dir === d.value}
             onClick={() => onChange({ dir: d.value })}
             className={`px-4 py-1.5 ${view.dir === d.value ? 'bg-indigo-950 text-white' : 'bg-white text-indigo-950'}`}
           >
@@ -2746,6 +2925,12 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
 > stale closure of `setView` is harmless now. See `task-12-report.md` for
 > the full before/after evidence, the ordering-edge-case analysis, and the
 > Back/Forward and two-fast-clicks verification.
+>
+> **Updated by the final-review fix pass (2026-08-04):** the direction
+> toggle buttons (Departures/Arrivals) now get `type="button"` and
+> `aria-pressed={view.dir === d.value}`, matching the pair the airport tabs
+> in `Header.tsx` already got in an earlier fix round — the visually
+> identical direction toggle had been missed. No visual change.
 
 - [ ] **Step 4: Rewrite `src/app/page.tsx` as the full dashboard**
 
@@ -2813,8 +2998,16 @@ function Dashboard() {
     return view.sort.asc ? sorted : sorted.reverse()
   }, [directional, view])
 
-  const onSort = (key: ViewState['sort']['key']) =>
-    setView({ sort: { key, asc: view.sort.key === key ? !view.sort.asc : true } })
+  // Computed against pendingView.current, not the closed-over `view`: the
+  // patch-merge mechanism above only keeps concurrent patches from clobbering
+  // each other, it does not make patch CONTENTS fresh. Two rapid clicks
+  // built from `view` would both toggle off the same stale asc/desc value
+  // (the second one a no-op); building from pendingView.current means the
+  // second click always toggles the result of the first.
+  const onSort = (key: ViewState['sort']['key']) => {
+    const current = pendingView.current
+    setView({ sort: { key, asc: current.sort.key === key ? !current.sort.asc : true } })
+  }
 
   const emptyMessage = data?.stale
     ? `${view.airport} is unreachable and the cached data has aged out of the window — this may not mean there are no flights.`
@@ -2857,7 +3050,9 @@ function Dashboard() {
             view={view}
             flights={directional}
             onChange={setView}
-            onReset={() => setView({ ...DEFAULT_VIEW, airport: view.airport, dir: view.dir })}
+            onReset={() =>
+              setView({ ...DEFAULT_VIEW, airport: pendingView.current.airport, dir: pendingView.current.dir })
+            }
           />
           <div className="mt-3 overflow-x-auto">
             {data ? (
@@ -2898,6 +3093,14 @@ export default function Page() {
 > unguarded (three writes landing across two back-to-back commits), and
 > verification of the Back/Forward case and the pre-existing "two fast
 > clicks revert each other" bug this also fixes.
+>
+> **Updated by the final-review fix pass (2026-08-04):** `onSort` and the
+> `onReset` prop passed to `FilterBar` now compute their patches from
+> `pendingView.current` instead of the closed-over `view`. `pendingView`
+> already made patch *merging* safe (above), but patch *contents* could
+> still be stale: two rapid sort-header clicks both toggled off the same
+> stale `asc`/`desc` value (the second click a no-op), and a Reset racing
+> an airport-tab click could carry the old airport and revert the switch.
 
 - [ ] **Step 5: Verify the full behavior manually**
 
@@ -2972,8 +3175,28 @@ EXPOSE 3000
 # probing /api/flights would pull 14.3 MB from flysfo on every check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD wget -qO- http://localhost:3000/api/health || exit 1
+# Run as the non-root `node` user the base image ships. The standalone build
+# output above was COPYed in while root (default build-stage user), but with
+# default umask that leaves files/dirs world-readable/executable (644/755),
+# which is all `node` needs to read and run them — no --chown required.
+USER node
 CMD ["node", "server.js"]
 ```
+
+> **Updated by the final-review fix pass (2026-08-04):** added `USER node`
+> before `CMD` — the base image ships a non-root `node` user and the
+> container had been running as root with no reason to. Not verified by an
+> actual build/run: Docker cannot pull base images in this sandbox
+> (confirmed independently — the daemon is unreachable here). Reasoned
+> instead: `COPY` in the `run` stage happens while root (the default
+> build-stage user), but standard build tooling leaves regular files at
+> 644 and directories at 755, both world-readable/executable, so the `node`
+> user needs no `--chown` to read and execute them; the app is a plain
+> `node server.js` process binding port 3000 (not a privileged port) with
+> no ISR/`revalidate` usage that would need to write into `.next/cache` at
+> runtime, so no other permission gap is expected. This should be verified
+> with an actual `docker build && docker run` once network access to pull
+> `node:24-alpine` is available.
 
 If `public/` does not exist (nothing was ever put there), create it with a
 `.gitkeep` so the `COPY` succeeds: `mkdir -p public && touch public/.gitkeep`.

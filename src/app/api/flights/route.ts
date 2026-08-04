@@ -23,7 +23,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `Could not reach ${airport}` }, { status: 502 })
   }
 
-  const etag = `"${airport}-${result.fetchedAt}"`
+  // The stale flag is folded into the ETag: a stale response deliberately
+  // reuses the original fetchedAt (see cache.ts), so without this a client
+  // holding the pre-outage ETag would get a 304 and never learn the data
+  // went stale. Folding stale in means the held ETag stops matching the
+  // moment the cache goes stale, so the client gets exactly one fresh 200
+  // carrying stale:true, then cheap 304s again until recovery changes
+  // fetchedAt and the ETag again.
+  const etag = `"${airport}-${result.fetchedAt}-${result.stale ? 1 : 0}"`
   if (req.headers.get('if-none-match') === etag) {
     return new NextResponse(null, {
       status: 304,

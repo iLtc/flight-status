@@ -32,7 +32,7 @@ interface SfoRecord {
   terminal: { terminal_code?: string } | null
   gate: { gate_number?: string } | null
   baggage_carousel: { carousel_name?: string } | null
-  checkins: Array<{ checkin: { checkin_name: string } }>
+  checkins?: Array<{ checkin: { checkin_name: string } }>
 }
 
 const REMARK_KINDS: Record<string, { kind: StatusKind; text: string }> = {
@@ -111,7 +111,7 @@ export function normalizeSfo(feed: SfoFeed, checkins: Record<string, string>): F
       // ADR 0001: aisles exist only in the International Terminal. T1/T2
       // counters share the 1–168 numeric range and would map to WRONG aisles.
       flight.checkin = aisleLabel(
-        raw.checkins.map((c) => c.checkin.checkin_name),
+        (raw.checkins ?? []).map((c) => c.checkin.checkin_name),
         checkins,
       )
     }

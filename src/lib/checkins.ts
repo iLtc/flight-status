@@ -10,7 +10,12 @@ export function aisleLabel(
 ): string | undefined {
   const nums = [...new Set(
     counters
-      .map((c) => dict[c])
+      // Object.hasOwn guards against a counter name that collides with an
+      // Object.prototype member (e.g. "constructor"): a bare dict[c] would
+      // return that inherited function instead of undefined, which then
+      // throws in .replace below instead of being skipped like any other
+      // unmapped counter.
+      .map((c) => (Object.hasOwn(dict, c) ? dict[c] : undefined))
       .filter((label): label is string => Boolean(label))
       .map((label) => Number(label.replace(/\D+/g, ''))),
   )].sort((a, b) => a - b)

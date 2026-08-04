@@ -61,8 +61,16 @@ function Dashboard() {
     return view.sort.asc ? sorted : sorted.reverse()
   }, [directional, view])
 
-  const onSort = (key: ViewState['sort']['key']) =>
-    setView({ sort: { key, asc: view.sort.key === key ? !view.sort.asc : true } })
+  // Computed against pendingView.current, not the closed-over `view`: the
+  // patch-merge mechanism above only keeps concurrent patches from clobbering
+  // each other, it does not make patch CONTENTS fresh. Two rapid clicks
+  // built from `view` would both toggle off the same stale asc/desc value
+  // (the second one a no-op); building from pendingView.current means the
+  // second click always toggles the result of the first.
+  const onSort = (key: ViewState['sort']['key']) => {
+    const current = pendingView.current
+    setView({ sort: { key, asc: current.sort.key === key ? !current.sort.asc : true } })
+  }
 
   const emptyMessage = data?.stale
     ? `${view.airport} is unreachable and the cached data has aged out of the window — this may not mean there are no flights.`
@@ -105,7 +113,9 @@ function Dashboard() {
             view={view}
             flights={directional}
             onChange={setView}
-            onReset={() => setView({ ...DEFAULT_VIEW, airport: view.airport, dir: view.dir })}
+            onReset={() =>
+              setView({ ...DEFAULT_VIEW, airport: pendingView.current.airport, dir: pendingView.current.dir })
+            }
           />
           <div className="mt-3 overflow-x-auto">
             {data ? (

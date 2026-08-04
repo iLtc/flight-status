@@ -27,4 +27,10 @@ describe('aisleLabel', () => {
     expect(aisleLabel(['CURBSIDE 5', 'SELF SERVICE BAG DROP 12'], DICT)).toBeUndefined()
     expect(aisleLabel([], DICT)).toBeUndefined()
   })
+  it('skips a counter name that collides with an Object.prototype member instead of crashing', () => {
+    // A bare dict['constructor'] returns Object's constructor function
+    // rather than undefined, which used to throw inside .replace().
+    expect(aisleLabel(['constructor'], DICT)).toBeUndefined()
+    expect(aisleLabel(['constructor', '57'], DICT)).toBe('Aisle 5')
+  })
 })

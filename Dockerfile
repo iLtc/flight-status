@@ -22,4 +22,9 @@ EXPOSE 3000
 # probing /api/flights would pull 14.3 MB from flysfo on every check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD wget -qO- http://localhost:3000/api/health || exit 1
+# Run as the non-root `node` user the base image ships. The standalone build
+# output above was COPYed in while root (default build-stage user), but with
+# default umask that leaves files/dirs world-readable/executable (644/755),
+# which is all `node` needs to read and run them — no --chown required.
+USER node
 CMD ["node", "server.js"]
