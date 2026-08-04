@@ -25,7 +25,10 @@ export async function GET(req: NextRequest) {
 
   const etag = `"${airport}-${result.fetchedAt}"`
   if (req.headers.get('if-none-match') === etag) {
-    return new NextResponse(null, { status: 304, headers: { ETag: etag } })
+    return new NextResponse(null, {
+      status: 304,
+      headers: { ETag: etag, 'Cache-Control': 'no-store' },
+    })
   }
 
   const body: FlightsResponse = {

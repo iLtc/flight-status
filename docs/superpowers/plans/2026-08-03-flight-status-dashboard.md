@@ -1685,7 +1685,10 @@ export async function GET(req: NextRequest) {
 
   const etag = `"${airport}-${result.fetchedAt}"`
   if (req.headers.get('if-none-match') === etag) {
-    return new NextResponse(null, { status: 304, headers: { ETag: etag } })
+    return new NextResponse(null, {
+      status: 304,
+      headers: { ETag: etag, 'Cache-Control': 'no-store' },
+    })
   }
 
   const body: FlightsResponse = {
@@ -1769,7 +1772,9 @@ describe('GET /api/flights', () => {
   it('serves SJC and includes both directions', async () => {
     stubUpstream()
     const { GET } = await importRoute()
-    const body = await (await GET(request('airport=sjc'))).json()
+    const res = await GET(request('airport=sjc'))
+    expect(res.status).toBe(200)
+    const body = await res.json()
     const dirs = new Set(body.flights.map((f: { direction: string }) => f.direction))
     expect(dirs).toEqual(new Set(['arrival', 'departure']))
   })
@@ -1781,6 +1786,7 @@ describe('GET /api/flights', () => {
     const etag = first.headers.get('etag')!
     const second = await GET(request('airport=sfo', { 'if-none-match': etag }))
     expect(second.status).toBe(304)
+    expect(await second.text()).toBe('')
   })
 
   it('502s when upstream fails with nothing cached', async () => {
@@ -1800,6 +1806,30 @@ describe('GET /api/flights', () => {
     const body = await res.json()
     expect(body.stale).toBe(true)
     expect(body.cachedAt).toBe('2026-08-03T16:42:00-07:00')
+  })
+
+  it('forceRefresh bypasses the 5-minute TTL early, via the 1-minute force floor', async () => {
+    stubUpstream()
+    const { GET } = await importRoute()
+    const first = await GET(request('airport=sfo'))
+    const etag = first.headers.get('etag')!
+
+    // +90s: fresh under the 5-minute normal TTL, stale under the 1-minute force TTL.
+    vi.setSystemTime(new Date('2026-08-03T16:43:30-07:00'))
+
+    const plain = await GET(request('airport=sfo'))
+    expect(plain.headers.get('etag')).toBe(etag)
+
+    const forced = await GET(request('airport=sfo&forceRefresh=1'))
+    expect(forced.headers.get('etag')).not.toBe(etag)
+  })
+
+  it('sends a timeout signal with every upstream fetch', async () => {
+    stubUpstream()
+    const { GET } = await importRoute()
+    await GET(request('airport=sfo'))
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 })
 
