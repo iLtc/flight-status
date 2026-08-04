@@ -33,6 +33,11 @@ describe('effectiveTime and windowed', () => {
     const upperEdge = flight({ scheduled: '2026-08-04T00:42:00-07:00' })  // exactly now + 8h
     expect(windowed([lowerEdge, upperEdge], NOW)).toEqual([lowerEdge, upperEdge])
   })
+  it('drops a flight with an unparseable scheduled time instead of letting it leak through', () => {
+    const bad = flight({ scheduled: 'not-a-time', estimated: undefined })
+    const good = flight({ scheduled: '2026-08-03T17:00:00-07:00' })
+    expect(windowed([bad, good], NOW)).toEqual([good])
+  })
 })
 
 describe('compareFlights', () => {
