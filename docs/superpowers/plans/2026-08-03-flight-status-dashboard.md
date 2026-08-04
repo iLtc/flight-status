@@ -2093,6 +2093,15 @@ export function useFlights(airport: Airport) {
   const pollRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const flashRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const loadRef = useRef<(force?: boolean) => void>(() => {})
+  // Bumped at the start of every load() and on every airport switch. A load
+  // only applies its result if its captured generation still matches when it
+  // resolves — otherwise it mutates nothing. This is what stops a slow
+  // response for an airport the user has since switched away from (or a slow
+  // poll overtaken by a faster forced refresh) from clobbering newer state.
+  // Do not delete this as ceremony: without it, a fetch in flight during an
+  // airport switch can land later and silently overwrite the screen with the
+  // wrong airport's flights.
+  const generationRef = useRef(0)
 
   const showFlash = useCallback((msg: string) => {
     setFlash(msg)
@@ -2101,6 +2110,7 @@ export function useFlights(airport: Airport) {
   }, [])
 
   const load = useCallback(async (force = false) => {
+    const gen = ++generationRef.current
     clearTimeout(pollRef.current)
     if (force) setRefreshing(true)
     try {
@@ -2111,12 +2121,14 @@ export function useFlights(airport: Airport) {
         `/api/flights?airport=${airport.toLowerCase()}${force ? '&forceRefresh=1' : ''}`,
         { headers, cache: 'no-store' },
       )
+      if (gen !== generationRef.current) return
       if (res.status === 304) {
         setUpdatedAt(new Date())
         setFetchFailed(false)
         if (force) showFlash('Already up to date')
       } else if (res.ok) {
         const body: FlightsResponse = await res.json()
+        if (gen !== generationRef.current) return
         if (force && cachedAtRef.current === body.cachedAt) showFlash('Already up to date')
         etagRef.current = res.headers.get('etag')
         cachedAtRef.current = body.cachedAt
@@ -2127,12 +2139,15 @@ export function useFlights(airport: Airport) {
         setFetchFailed(true)
       }
     } catch {
+      if (gen !== generationRef.current) return
       setFetchFailed(true)
     } finally {
-      setRefreshing(false)
-      // Restart the countdown AFTER the load completes, so a manual refresh
-      // resets the timer. Hidden tabs skip the fetch and re-arm the timer.
-      schedule()
+      if (gen === generationRef.current) {
+        setRefreshing(false)
+        // Restart the countdown AFTER the load completes, so a manual refresh
+        // resets the timer. Hidden tabs skip the fetch and re-arm the timer.
+        schedule()
+      }
     }
   }, [airport, showFlash])
 
@@ -2147,6 +2162,7 @@ export function useFlights(airport: Airport) {
   loadRef.current = load
 
   useEffect(() => {
+    generationRef.current++
     setData(null)
     setUpdatedAt(null)
     setFetchFailed(false)
@@ -2170,6 +2186,16 @@ export function useFlights(airport: Airport) {
 
 (`schedule` is a function declaration below its first use in `load` — hoisting
 makes that legal, and keeping `load` first keeps the file readable.)
+
+`generationRef` exists to close a real race, found and reproduced during
+implementation: without it, a fetch left in flight when the user switches
+airports (or a slow 60s poll overtaken by a faster forced refresh) can resolve
+afterward and overwrite state with the wrong airport's flights — a volunteer
+would see the wrong airport's board. A `generationRef` counter, bumped on
+every `load()` call and on every airport switch, catches both cases with one
+mechanism (an `AbortController` scoped to the effect would only catch the
+airport-switch case); every state mutation in `load` is guarded by a check
+that the load's captured generation still matches before it runs.
 
 - [ ] **Step 2: Write `src/components/Header.tsx`**
 
