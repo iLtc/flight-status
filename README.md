@@ -43,3 +43,15 @@ Needed only once, before the first deploy.
   (−1 h to +8 h) flights for one airport. Server cache: 5 min (1 min under
   forceRefresh). Supports `If-None-Match`/304.
 - `GET /api/health` — liveness probe; touches nothing upstream.
+
+## Known issues
+
+If you press Force refresh between one and five minutes into an airport
+outage, the "couldn't reach" banner can briefly clear and then return. This
+is because force refresh and the automatic poll use different freshness
+windows (one minute versus five), and the cache does not remember that its
+last attempt failed. The data shown during that gap is still within the
+app's normal freshness window and its "Server data from" timestamp remains
+accurate, so nothing incorrect is displayed — the banner just under-reports
+the outage for up to about three and a half minutes. Fixing it properly
+means tracking the last failure time in the cache.

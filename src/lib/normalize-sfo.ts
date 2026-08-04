@@ -14,11 +14,13 @@ interface SfoAirline {
 interface SfoRecord {
   flight_id: string
   flight_kind: 'Arrival' | 'Departure'
-  airline: SfoAirline
+  // Optional, not required: the feed's shape is not guaranteed, and both are
+  // dereferenced with ?. below instead of assuming the key is present.
+  airline?: SfoAirline
   flight_number: string
   is_code_share?: boolean
   original_flight?: { airline: SfoAirline; flight_number: string } | null
-  airport: {
+  airport?: {
     iata_code?: string
     airport_name?: string
     airport_city?: string
@@ -32,7 +34,9 @@ interface SfoRecord {
   terminal: { terminal_code?: string } | null
   gate: { gate_number?: string } | null
   baggage_carousel: { carousel_name?: string } | null
-  checkins?: Array<{ checkin: { checkin_name: string } }>
+  // checkin and checkin_name both optional: a malformed element (e.g. {})
+  // must be skippable rather than thrown on at c.checkin.checkin_name.
+  checkins?: Array<{ checkin?: { checkin_name?: string } }>
 }
 
 const REMARK_KINDS: Record<string, { kind: StatusKind; text: string }> = {
@@ -82,10 +86,10 @@ export function normalizeSfo(feed: SfoFeed, checkins: Record<string, string>): F
       airport: 'SFO',
       direction,
       airline: airlineName(raw.airline),
-      airlineCode: raw.airline.iata_code,
+      airlineCode: raw.airline?.iata_code,
       flightNumber: raw.flight_number,
-      city: raw.airport.airport_city ?? raw.airport.airport_name ?? '—',
-      cityCode: raw.airport.iata_code,
+      city: raw.airport?.airport_city ?? raw.airport?.airport_name ?? '—',
+      cityCode: raw.airport?.iata_code,
       scheduled: raw.scheduled_in_off_block_time,
       estimated,
       status: statusFromRemark(raw.remark),
@@ -111,7 +115,9 @@ export function normalizeSfo(feed: SfoFeed, checkins: Record<string, string>): F
       // ADR 0001: aisles exist only in the International Terminal. T1/T2
       // counters share the 1–168 numeric range and would map to WRONG aisles.
       flight.checkin = aisleLabel(
-        (raw.checkins ?? []).map((c) => c.checkin.checkin_name),
+        (raw.checkins ?? [])
+          .map((c) => c.checkin?.checkin_name)
+          .filter((name): name is string => typeof name === 'string'),
         checkins,
       )
     }

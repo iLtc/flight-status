@@ -7,8 +7,12 @@ interface SjcRecord {
   // parseSjcDateTime (which calls .trim() and throws on a non-string).
   date: unknown
   time: unknown
-  airline: string
-  flight_number: string
+  // Typed unknown, not string, for the same reason: a numeric flight_number
+  // or airline in the feed would otherwise reach f.flightNumber.toLowerCase()
+  // in matchesQuery (flight-view.ts) and throw there instead, so toFlight()
+  // below must guard these too.
+  airline: unknown
+  flight_number: unknown
   origin?: string
   origin_code?: string
   destination?: string
@@ -51,7 +55,12 @@ function toFlight(r: SjcRecord, direction: Direction, now: Date): Flight | null 
   // parseSjcDateTime and throw, aborting normalization for the whole feed
   // instead of just dropping this one malformed row (same skip-the-row
   // precedent as the "unparseable time" case below).
-  if (typeof r.date !== 'string' || typeof r.time !== 'string') return null
+  if (
+    typeof r.date !== 'string' ||
+    typeof r.time !== 'string' ||
+    typeof r.airline !== 'string' ||
+    typeof r.flight_number !== 'string'
+  ) return null
   const scheduled = parseSjcDateTime(r.date, r.time, now)
   if (!scheduled) return null
   const status = parseStatus(r.status, r.date, scheduled, now)

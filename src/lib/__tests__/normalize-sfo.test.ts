@@ -96,6 +96,34 @@ describe('normalizeSfo — malformed feed rows', () => {
     expect(result[0].terminal).toBe('INTL')
     expect(result[0].checkin).toBeUndefined()
   })
+  it('normalizes a record missing airline and airport, and with a malformed checkins element, instead of throwing', () => {
+    const raw = {
+      flight_id: 'YY/2/D',
+      flight_kind: 'Departure',
+      // airline intentionally omitted — real-world feed drift, not a test artifact.
+      flight_number: '2',
+      // airport intentionally omitted.
+      scheduled_in_off_block_time: '2026-08-03T12:00:00-07:00',
+      estimated_in_off_block_time: null,
+      actual_in_off_block_time: null,
+      first_bag_time: null,
+      last_bag_time: null,
+      remark: 'On Time',
+      terminal: { terminal_code: 'ITM' },
+      gate: null,
+      baggage_carousel: null,
+      checkins: [{}], // malformed element — missing the `checkin` key entirely.
+    }
+    expect(() => normalizeSfo({ data: [raw] }, {})).not.toThrow()
+    const result = normalizeSfo({ data: [raw] }, {})
+    expect(result).toHaveLength(1)
+    expect(result[0].airline).toBe('—')
+    expect(result[0].airlineCode).toBeUndefined()
+    expect(result[0].city).toBe('—')
+    expect(result[0].cityCode).toBeUndefined()
+    expect(result[0].terminal).toBe('INTL')
+    expect(result[0].checkin).toBeUndefined()
+  })
 })
 
 describe('normalizeSfo — field fallbacks', () => {

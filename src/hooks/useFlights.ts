@@ -14,6 +14,7 @@ export function useFlights(airport: Airport) {
   const [refreshing, setRefreshing] = useState(false)
   const etagRef = useRef<string | null>(null)
   const cachedAtRef = useRef<string | null>(null)
+  const staleRef = useRef(false)
   const pollRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const flashRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const loadRef = useRef<(force?: boolean) => void>(() => {})
@@ -49,7 +50,13 @@ export function useFlights(airport: Airport) {
       if (res.status === 304) {
         setUpdatedAt(new Date())
         setFetchFailed(false)
-        if (force) showFlash('Already up to date')
+        // Guarded on !staleRef.current: the ETag now folds in the stale
+        // flag (see route.ts), so a 304 during an outage only happens once
+        // the client already holds the stale ETag — i.e. every force press
+        // after the first one in that outage. Without this guard, that
+        // second-and-later press would flash "Already up to date" while
+        // gates and times are still drifting.
+        if (force && !staleRef.current) showFlash('Already up to date')
       } else if (res.ok) {
         const body: FlightsResponse = await res.json()
         if (gen !== generationRef.current) return
@@ -61,6 +68,7 @@ export function useFlights(airport: Airport) {
         if (force && !body.stale && cachedAtRef.current === body.cachedAt) showFlash('Already up to date')
         etagRef.current = res.headers.get('etag')
         cachedAtRef.current = body.cachedAt
+        staleRef.current = body.stale
         setData(body)
         setUpdatedAt(new Date())
         setFetchFailed(false)
@@ -100,6 +108,7 @@ export function useFlights(airport: Airport) {
     setFlash(null)
     etagRef.current = null
     cachedAtRef.current = null
+    staleRef.current = false
     load()
     const onVisible = () => {
       if (document.visibilityState === 'visible') loadRef.current()

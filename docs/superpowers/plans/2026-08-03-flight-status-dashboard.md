@@ -805,11 +805,13 @@ interface SfoAirline {
 interface SfoRecord {
   flight_id: string
   flight_kind: 'Arrival' | 'Departure'
-  airline: SfoAirline
+  // Optional, not required: the feed's shape is not guaranteed, and both are
+  // dereferenced with ?. below instead of assuming the key is present.
+  airline?: SfoAirline
   flight_number: string
   is_code_share?: boolean
   original_flight?: { airline: SfoAirline; flight_number: string } | null
-  airport: {
+  airport?: {
     iata_code?: string
     airport_name?: string
     airport_city?: string
@@ -823,7 +825,9 @@ interface SfoRecord {
   terminal: { terminal_code?: string } | null
   gate: { gate_number?: string } | null
   baggage_carousel: { carousel_name?: string } | null
-  checkins?: Array<{ checkin: { checkin_name: string } }>
+  // checkin and checkin_name both optional: a malformed element (e.g. {})
+  // must be skippable rather than thrown on at c.checkin.checkin_name.
+  checkins?: Array<{ checkin?: { checkin_name?: string } }>
 }
 
 const REMARK_KINDS: Record<string, { kind: StatusKind; text: string }> = {
@@ -873,10 +877,10 @@ export function normalizeSfo(feed: SfoFeed, checkins: Record<string, string>): F
       airport: 'SFO',
       direction,
       airline: airlineName(raw.airline),
-      airlineCode: raw.airline.iata_code,
+      airlineCode: raw.airline?.iata_code,
       flightNumber: raw.flight_number,
-      city: raw.airport.airport_city ?? raw.airport.airport_name ?? '—',
-      cityCode: raw.airport.iata_code,
+      city: raw.airport?.airport_city ?? raw.airport?.airport_name ?? '—',
+      cityCode: raw.airport?.iata_code,
       scheduled: raw.scheduled_in_off_block_time,
       estimated,
       status: statusFromRemark(raw.remark),
@@ -902,7 +906,9 @@ export function normalizeSfo(feed: SfoFeed, checkins: Record<string, string>): F
       // ADR 0001: aisles exist only in the International Terminal. T1/T2
       // counters share the 1–168 numeric range and would map to WRONG aisles.
       flight.checkin = aisleLabel(
-        (raw.checkins ?? []).map((c) => c.checkin.checkin_name),
+        (raw.checkins ?? [])
+          .map((c) => c.checkin?.checkin_name)
+          .filter((name): name is string => typeof name === 'string'),
         checkins,
       )
     }
@@ -921,6 +927,22 @@ export function normalizeSfo(feed: SfoFeed, checkins: Record<string, string>): F
 > of dropping just that one row. A new test in
 > `src/lib/__tests__/normalize-sfo.test.ts` constructs an INTL departure
 > record missing `checkins` and asserts it normalizes instead of throwing.
+
+> **Updated by the second final-review fix pass (2026-08-04):** three more
+> unguarded derefs of the same class, two lines from the ones above, each
+> capable of aborting normalization for the whole ~2,650-record feed:
+> `raw.airline.iata_code` and `raw.airport.airport_city`/`airport_name` are
+> now optional-chained (`SfoRecord.airline`/`.airport` also retyped
+> optional), and the `checkins` map now filters out a malformed element
+> (e.g. `checkins: [{}]`, missing the `checkin` key) instead of dereferencing
+> it unconditionally. All three keep the existing `?? '—'`/`undefined`
+> fallbacks — a missing value still renders as an em dash, nothing is
+> invented. The INTL-only aisle gate (ADR 0001) and the one-record-to-one-
+> Flight dedupe (ADR 0002) are untouched. A new test in
+> `src/lib/__tests__/normalize-sfo.test.ts` constructs a record with
+> `airline` and `airport` both absent and a malformed `checkins` element,
+> and asserts it normalizes (not throws) with the affected fields falling
+> back to `—`/`undefined`.
 
 - [ ] **Step 6: Run tests to verify they pass**
 
@@ -1095,8 +1117,12 @@ interface SjcRecord {
   // parseSjcDateTime (which calls .trim() and throws on a non-string).
   date: unknown
   time: unknown
-  airline: string
-  flight_number: string
+  // Typed unknown, not string, for the same reason: a numeric flight_number
+  // or airline in the feed would otherwise reach f.flightNumber.toLowerCase()
+  // in matchesQuery (flight-view.ts) and throw there instead, so toFlight()
+  // below must guard these too.
+  airline: unknown
+  flight_number: unknown
   origin?: string
   origin_code?: string
   destination?: string
@@ -1139,7 +1165,12 @@ function toFlight(r: SjcRecord, direction: Direction, now: Date): Flight | null 
   // parseSjcDateTime and throw, aborting normalization for the whole feed
   // instead of just dropping this one malformed row (same skip-the-row
   // precedent as the "unparseable time" case below).
-  if (typeof r.date !== 'string' || typeof r.time !== 'string') return null
+  if (
+    typeof r.date !== 'string' ||
+    typeof r.time !== 'string' ||
+    typeof r.airline !== 'string' ||
+    typeof r.flight_number !== 'string'
+  ) return null
   const scheduled = parseSjcDateTime(r.date, r.time, now)
   if (!scheduled) return null
   const status = parseStatus(r.status, r.date, scheduled, now)
@@ -1179,6 +1210,17 @@ export function normalizeSjc(arrivals: unknown[], departures: unknown[], now: Da
 > already used for an unparseable scheduled time). A new test in
 > `src/lib/__tests__/normalize-sjc.test.ts` gives one row a numeric `date`
 > alongside a good row and asserts only the good one survives.
+
+> **Updated by the second final-review fix pass (2026-08-04):**
+> `SjcRecord.airline`/`.flight_number` are now typed `unknown` too (same
+> reasoning as `date`/`.time` above), and `toFlight`'s guard clause also
+> requires both to be `string`, returning `null` otherwise. A numeric
+> `flight_number` in the feed previously survived this guard, reached
+> `matchesQuery` in `src/lib/flight-view.ts` (`f.flightNumber.toLowerCase()`),
+> and threw — blanking the entire dashboard whenever the search box was
+> non-empty. A new test in `src/lib/__tests__/normalize-sjc.test.ts` gives
+> one row a numeric `flight_number` alongside a good row and asserts only
+> the good one survives.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -2272,6 +2314,7 @@ export function useFlights(airport: Airport) {
   const [refreshing, setRefreshing] = useState(false)
   const etagRef = useRef<string | null>(null)
   const cachedAtRef = useRef<string | null>(null)
+  const staleRef = useRef(false)
   const pollRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const flashRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const loadRef = useRef<(force?: boolean) => void>(() => {})
@@ -2307,7 +2350,13 @@ export function useFlights(airport: Airport) {
       if (res.status === 304) {
         setUpdatedAt(new Date())
         setFetchFailed(false)
-        if (force) showFlash('Already up to date')
+        // Guarded on !staleRef.current: the ETag now folds in the stale
+        // flag (see route.ts), so a 304 during an outage only happens once
+        // the client already holds the stale ETag — i.e. every force press
+        // after the first one in that outage. Without this guard, that
+        // second-and-later press would flash "Already up to date" while
+        // gates and times are still drifting.
+        if (force && !staleRef.current) showFlash('Already up to date')
       } else if (res.ok) {
         const body: FlightsResponse = await res.json()
         if (gen !== generationRef.current) return
@@ -2319,6 +2368,7 @@ export function useFlights(airport: Airport) {
         if (force && !body.stale && cachedAtRef.current === body.cachedAt) showFlash('Already up to date')
         etagRef.current = res.headers.get('etag')
         cachedAtRef.current = body.cachedAt
+        staleRef.current = body.stale
         setData(body)
         setUpdatedAt(new Date())
         setFetchFailed(false)
@@ -2358,6 +2408,7 @@ export function useFlights(airport: Airport) {
     setFlash(null)
     etagRef.current = null
     cachedAtRef.current = null
+    staleRef.current = false
     load()
     const onVisible = () => {
       if (document.visibilityState === 'visible') loadRef.current()
@@ -2438,6 +2489,29 @@ cover this path since it's a ref write, not a `load()` state mutation.
 > action a volunteer takes to check freshness giving false reassurance. The
 > 304-path flash is untouched: after the ETag fix, a stale response can no
 > longer produce a 304 for a client holding a pre-outage ETag.
+
+> **Updated by the second final-review fix pass (2026-08-04):** the previous
+> update above was only half the fix — it left the 304-path flash
+> unconditional on `force`, which is wrong for every force press *after* the
+> first one in an outage. Once one load has stored the stale ETag (the
+> 60 s poller replaces the client's ETag with it within one interval, so
+> this is the common case, not a race), a subsequent force press sends that
+> ETag, the server recomputes the same stale ETag, and returns `304` — so
+> the old code flashed "Already up to date" anyway. Fixed with a new
+> `staleRef` (declared beside `cachedAtRef`): set to `body.stale` in the
+> 200 branch, reset to `false` in the airport-switch reset block (so a
+> stale SFO cannot suppress a legitimate SJC flash), and the 304 branch's
+> condition changed to `if (force && !staleRef.current) showFlash(...)`.
+> No automated hook test exists by design (this hook has no unit tests —
+> frontend tasks are typecheck + manual-check only per this plan's
+> convention); verified by reasoning through the state machine instead: first
+> force press of an outage is a `200` with `stale: true` (no flash, `staleRef`
+> becomes `true`); second and later force presses in the same outage are
+> `304` with `staleRef.current === true` (still no flash — this is exactly
+> the case the old code got wrong); a force press when genuinely fresh and
+> unchanged is `304` with `staleRef.current === false` (flash fires,
+> unaffected by this fix); and after an airport switch `staleRef.current`
+> is reset to `false` so the new airport starts from a clean slate.
 
 - [ ] **Step 2: Write `src/components/Header.tsx`**
 
@@ -3369,7 +3443,24 @@ Every push to `main` publishes `ghcr.io/iltc/flight-status:latest`
   (−1 h to +8 h) flights for one airport. Server cache: 5 min (1 min under
   forceRefresh). Supports `If-None-Match`/304.
 - `GET /api/health` — liveness probe; touches nothing upstream.
+
+## Known issues
+
+If you press Force refresh between one and five minutes into an airport
+outage, the "couldn't reach" banner can briefly clear and then return. This
+is because force refresh and the automatic poll use different freshness
+windows (one minute versus five), and the cache does not remember that its
+last attempt failed. The data shown during that gap is still within the
+app's normal freshness window and its "Server data from" timestamp remains
+accurate, so nothing incorrect is displayed — the banner just under-reports
+the outage for up to about three and a half minutes. Fixing it properly
+means tracking the last failure time in the cache.
 ```
+
+> **Updated by the second final-review fix pass (2026-08-04):** added the
+> "Known issues" section above, documenting (not fixing — deliberately out
+> of scope, since it changes cache semantics) a residual edge case in the
+> force-refresh/poll freshness-window interaction found during that review.
 
 - [ ] **Step 3: Verify and commit**
 
