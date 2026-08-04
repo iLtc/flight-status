@@ -1,0 +1,40 @@
+import { type NextRequest, NextResponse } from 'next/server'
+import { createCache } from '@/lib/cache'
+import { windowed } from '@/lib/flight-view'
+import { toPtIso } from '@/lib/time'
+import type { Airport, FlightsResponse } from '@/lib/types'
+import { fetchAirport } from '@/lib/upstream'
+
+// Module scope: the cache lives for the lifetime of the server process.
+const cache = createCache(fetchAirport)
+
+export async function GET(req: NextRequest) {
+  const params = req.nextUrl.searchParams
+  const airport = params.get('airport')?.toUpperCase()
+  if (airport !== 'SFO' && airport !== 'SJC') {
+    return NextResponse.json({ error: 'airport must be sfo or sjc' }, { status: 400 })
+  }
+  const force = params.get('forceRefresh') === '1'
+
+  let result
+  try {
+    result = await cache.get(airport as Airport, { force })
+  } catch {
+    return NextResponse.json({ error: `Could not reach ${airport}` }, { status: 502 })
+  }
+
+  const etag = `"${airport}-${result.fetchedAt}"`
+  if (req.headers.get('if-none-match') === etag) {
+    return new NextResponse(null, { status: 304, headers: { ETag: etag } })
+  }
+
+  const body: FlightsResponse = {
+    airport: airport as Airport,
+    cachedAt: toPtIso(new Date(result.fetchedAt)),
+    stale: result.stale,
+    flights: windowed(result.value, new Date()),
+  }
+  return NextResponse.json(body, {
+    headers: { ETag: etag, 'Cache-Control': 'no-store' },
+  })
+}
