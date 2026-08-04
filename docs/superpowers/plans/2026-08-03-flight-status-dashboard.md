@@ -1914,6 +1914,14 @@ describe('parseView', () => {
     const v = parseView(new URLSearchParams('airport=LAX&dir=sideways&sort=nope.upward'))
     expect(v).toEqual(DEFAULT_VIEW)
   })
+  it('treats a valid sort key with a nonsense direction as ascending', () => {
+    const v = parseView(new URLSearchParams('sort=sched.upward'))
+    expect(v.sort).toEqual({ key: 'sched', asc: true })
+  })
+  it('treats a dotless sort value as ascending', () => {
+    const v = parseView(new URLSearchParams('sort=sched'))
+    expect(v.sort).toEqual({ key: 'sched', asc: true })
+  })
 })
 
 describe('serializeView', () => {
@@ -1930,6 +1938,27 @@ describe('serializeView', () => {
     const v = {
       ...DEFAULT_VIEW, dir: 'arrival' as const, airline: 'Alaska Airlines',
       hideCodeshares: true,
+    }
+    expect(parseView(new URLSearchParams(serializeView(v)))).toEqual(v)
+  })
+  it('round-trips every field at once', () => {
+    const v = {
+      airport: 'SJC' as const, dir: 'arrival' as const, q: '1260',
+      airline: 'Delta', terminal: 'A', location: 'SLC', hideCodeshares: true,
+      sort: { key: 'gate' as const, asc: false },
+    }
+    expect(parseView(new URLSearchParams(serializeView(v)))).toEqual(v)
+  })
+  it('round-trips a non-default asc on the default sort key', () => {
+    const v = { ...DEFAULT_VIEW, sort: { key: 'est' as const, asc: false } }
+    expect(parseView(new URLSearchParams(serializeView(v)))).toEqual(v)
+  })
+  it('round-trips URL-hazardous characters in airline, location, and free text', () => {
+    const v = {
+      ...DEFAULT_VIEW,
+      q: 'A&B=C',
+      airline: 'ANA (All Nippon Airways)',
+      location: 'Seattle/Tacoma, WA',
     }
     expect(parseView(new URLSearchParams(serializeView(v)))).toEqual(v)
   })
