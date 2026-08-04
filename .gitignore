@@ -1,2 +1,7 @@
 # Brainstorming companion sessions (mockups, server state)
 .superpowers/
+
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
