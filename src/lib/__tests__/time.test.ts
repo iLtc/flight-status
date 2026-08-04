@@ -29,6 +29,23 @@ describe('parseSjcDateTime', () => {
     expect(parseSjcDateTime('Aug 03', 'soon', NOW)).toBeNull()
     expect(parseSjcDateTime('', '4:05 PM', NOW)).toBeNull()
   })
+
+  it('returns null for an hour outside the 12-hour clock', () => {
+    // The regex accepts 1-2 digits; without a range check `% 12` would
+    // silently reinterpret "13:05 AM" as 1:05 AM.
+    expect(parseSjcDateTime('Aug 03', '13:05 AM', NOW)).toBeNull()
+    expect(parseSjcDateTime('Aug 03', '00:05 AM', NOW)).toBeNull()
+    expect(parseSjcDateTime('Aug 03', '99:05 PM', NOW)).toBeNull()
+  })
+
+  it('returns null rather than throwing on a calendar-invalid date', () => {
+    // Feb 29 near a leap year: the non-leap candidate years are invalid
+    // dates, which must not poison the closest-candidate comparison.
+    expect(parseSjcDateTime('Feb 30', '4:05 PM', NOW)).toBeNull()
+    expect(
+      parseSjcDateTime('Feb 29', '4:05 PM', new Date('2028-02-20T12:00:00-08:00')),
+    ).toBe('2028-02-29T16:05:00-08:00')
+  })
 })
 
 describe('toPtIso', () => {

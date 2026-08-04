@@ -21,17 +21,24 @@ export function parseSjcDateTime(date: string, time: string, now: Date): string 
   const dm = /^([A-Za-z]{3}) (\d{1,2})$/.exec(date.trim())
   const tm = /^(\d{1,2}):(\d{2}) (AM|PM)$/.exec(time.trim())
   if (!dm || !tm || !(dm[1] in MONTHS)) return null
-  let hour = Number(tm[1]) % 12
-  if (tm[3] === 'PM') hour += 12
+  const clockHour = Number(tm[1])
+  // The regex admits 00-99; only 1-12 is a real 12-hour-clock hour, and
+  // `% 12` alone would silently reinterpret "13:05 AM" as 1:05 AM.
+  if (clockHour < 1 || clockHour > 12) return null
+  const hour = (clockHour % 12) + (tm[3] === 'PM' ? 12 : 0)
   const wall = (year: number) =>
     `${year}-${MONTHS[dm[1]]}-${dm[2].padStart(2, '0')}T${String(hour).padStart(2, '0')}:${tm[2]}:00`
   const nowYear = Number(formatInTimeZone(now, PT, 'yyyy'))
   let best: Date | null = null
   for (const year of [nowYear - 1, nowYear, nowYear + 1]) {
     const candidate = fromZonedTime(wall(year), PT)
+    // Skip calendar-invalid candidates (Feb 29 in a non-leap year): an
+    // Invalid Date would make every later comparison NaN — always false —
+    // pinning `best` to it and throwing downstream in toPtIso.
+    if (Number.isNaN(+candidate)) continue
     if (!best || Math.abs(+candidate - +now) < Math.abs(+best - +now)) best = candidate
   }
-  return toPtIso(best!)
+  return best ? toPtIso(best) : null
 }
 
 /** "4:05 PM" in PT. */
