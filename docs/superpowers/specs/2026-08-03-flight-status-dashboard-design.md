@@ -43,8 +43,10 @@ Alternatives considered and rejected:
 | SJC arrivals | `https://www.flysanjose.com/api/flightstatus/arrivals` | flat array: `date` ("Aug 03"), `time` ("4:05 PM"), `airline`, `flight_number`, `origin`+`origin_code`, `terminal` (A/B), `gate`, `baggage`, `status` |
 | SJC departures | `https://www.flysanjose.com/api/flightstatus/departures` | same minus `baggage`, with `destination`+`destination_code` |
 
-Sample responses live in the repo root (`sfo-flight-status.json`, `sfo-checkins.json`,
-`sjc-arrivals.json`, `sjc-departures.json`) and double as test fixtures.
+Sample responses live in `docs/samples/` (`sfo-flight-status.json`,
+`sfo-checkins.json`, `sjc-arrivals.json`, `sjc-departures.json`) and double as
+test fixtures. Screenshots of the two airports' current UIs, for visual
+reference, live in `docs/screenshots/`.
 
 Notes:
 
