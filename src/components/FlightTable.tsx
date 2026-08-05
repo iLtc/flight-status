@@ -2,11 +2,13 @@
 
 import { StatusPill } from '@/components/StatusPill'
 import type { SortKey } from '@/lib/flight-view'
+import { airportColor } from '@/lib/theme'
 import { formatTimePT, isNextDayPT } from '@/lib/time'
-import type { Direction, Flight } from '@/lib/types'
+import type { Airport, Direction, Flight } from '@/lib/types'
 
 interface FlightTableProps {
   flights: Flight[]
+  airport: Airport
   direction: Direction
   sort: { key: SortKey; asc: boolean }
   onSort: (key: SortKey) => void
@@ -25,8 +27,9 @@ function Time({ iso, now }: { iso: string | undefined; now: Date }) {
   )
 }
 
-export function FlightTable({ flights, direction, sort, onSort, emptyMessage }: FlightTableProps) {
+export function FlightTable({ flights, airport, direction, sort, onSort, emptyMessage }: FlightTableProps) {
   const now = new Date()
+  const accent = airportColor(airport)
   const columns: Array<{ key: SortKey; label: string }> = [
     { key: 'airline', label: 'Airline' },
     { key: 'city', label: direction === 'departure' ? 'To' : 'From' },
@@ -41,7 +44,7 @@ export function FlightTable({ flights, direction, sort, onSort, emptyMessage }: 
   return (
     <table className="w-full min-w-[720px] border-collapse text-sm">
       <thead>
-        <tr className="bg-indigo-950 text-left text-white">
+        <tr className="text-left text-white" style={{ backgroundColor: accent }}>
           {columns.map((c) => (
             <th
               key={c.key}

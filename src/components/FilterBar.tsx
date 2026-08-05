@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { airportColor } from '@/lib/theme'
 import type { Direction, Flight } from '@/lib/types'
 import type { ViewState } from '@/lib/url-state'
 
@@ -50,6 +51,7 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
     { value: 'departure', label: 'Departures' },
     { value: 'arrival', label: 'Arrivals' },
   ]
+  const accent = airportColor(view.airport)
   const select = 'rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm'
 
   // Local echo of the search box so keystrokes render immediately; mirrored
@@ -118,18 +120,29 @@ export function FilterBar({ view, flights, onChange, onReset }: FilterBarProps) 
 
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2.5">
-      <div className="inline-flex overflow-hidden rounded-md border-2 border-indigo-950 text-sm font-bold">
-        {dirs.map((d) => (
-          <button
-            key={d.value}
-            type="button"
-            aria-pressed={view.dir === d.value}
-            onClick={() => onChange({ dir: d.value })}
-            className={`px-4 py-1.5 ${view.dir === d.value ? 'bg-indigo-950 text-white' : 'bg-white text-indigo-950'}`}
-          >
-            {d.label}
-          </button>
-        ))}
+      <div
+        className="inline-flex overflow-hidden rounded-md border-2 text-sm font-bold"
+        style={{ borderColor: accent }}
+      >
+        {dirs.map((d) => {
+          const active = view.dir === d.value
+          return (
+            <button
+              key={d.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange({ dir: d.value })}
+              className="px-4 py-1.5"
+              style={
+                active
+                  ? { backgroundColor: accent, color: '#fff' }
+                  : { backgroundColor: '#fff', color: accent }
+              }
+            >
+              {d.label}
+            </button>
+          )
+        })}
       </div>
       <input
         value={q}
