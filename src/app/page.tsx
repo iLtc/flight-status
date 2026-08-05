@@ -121,6 +121,7 @@ function Dashboard() {
             {data ? (
               <FlightTable
                 flights={visible}
+                airport={view.airport}
                 direction={view.dir}
                 sort={view.sort}
                 onSort={onSort}
